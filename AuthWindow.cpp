@@ -4,7 +4,7 @@
 #include "FileManager.h"    // Для проверки файла и загрузки сессии
 #include "CryptoManager.h"   // Для функций шифрования, хеширования и PBKDF2
 #include "MainWindow.h"      // Чтобы создать и показать главное окно при успешном входе
-
+#include "TwoFactorDialog.h"
 // 2. Инклуды элементов интерфейса Qt
 #include <QLineEdit>
 #include <QPushButton>
@@ -107,6 +107,27 @@ void AuthWindow::HandleBtnLogin() {
             return;
         }
         OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
+        if (DatabaseManager::instance().Is2FAEnabled()) {
+            TwoFactorAuthDialog Dialog(this);
+            Dialog.setStyleSheet(this->styleSheet());
+            if (Dialog.exec() == QDialog::Accepted) {
+                int EnteredCode = Dialog.GetEnteredCode();
+                try {
+                    SecureString DecSecret2FA = DecryptAES(DatabaseManager::instance().GetEncrypted2FASecret(), decryptedDEK, saltVector);
+                    if (!Verify2FACode(DecSecret2FA, EnteredCode)) {
+                        QMessageBox::critical(this, "Ошибка доступа", "Неверный код!");
+                        return;
+                    }
+                }
+                catch (...) {
+                    QMessageBox::critical(this, "Ошибка доступа", "Не пройдена 2FA!");
+                    return;
+                }
+            }
+            else {
+                return;
+            }
+        }
         // 3. ЕСЛИ ВСЁ ОТЛИЧНО: Создаем главное окно, передаем туда данные и открываем его!
         MainWindow* mainWindow = new MainWindow();
 
