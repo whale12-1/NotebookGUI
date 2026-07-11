@@ -1,0 +1,248 @@
+#include "DatabaseManager.h"
+#include <QDebug>
+
+DatabaseManager& DatabaseManager::instance() {
+    static DatabaseManager inst;
+    return inst;
+}
+
+bool DatabaseManager::initDatabase(const QString& dbName) {
+    // Подключаем драйвер SQLite
+    m_db = QSqlDatabase::addDatabase("QSQLITE");
+    m_db.setDatabaseName(dbName);
+
+    if (!m_db.open()) {
+        qDebug() << "Ошибка открытия БД:" << m_db.lastError().text();
+        return false;
+    }
+
+    QSqlQuery query;
+
+    // Включаем поддержку внешних ключей (по умолчанию в SQLite она отключена!)
+    query.exec("PRAGMA foreign_keys = ON;");
+
+    // Создаем таблицу заметок
+    QString createNotesTable =
+        "CREATE TABLE IF NOT EXISTS notes ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "name TEXT NOT NULL, "
+        "secured_text TEXT NOT NULL, "
+        "previous_hash TEXT" // Добавили колонку в БД
+        ");";
+
+    if (!query.exec(createNotesTable)) {
+        qDebug() << "Ошибка создания таблицы notes:" << query.lastError().text();
+        return false;
+    }
+
+    // Создаем таблицу тегов с КАСКАДНЫМ удалением
+    QString createTagsTable =
+        "CREATE TABLE IF NOT EXISTS tags ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "note_id INTEGER NOT NULL, "
+        "tag_name TEXT NOT NULL, "
+        "FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE"
+        ");";
+
+    if (!query.exec(createTagsTable)) {
+        qDebug() << "Ошибка создания таблицы tags:" << query.lastError().text();
+        return false;
+    }
+    // Добавляем внутри DatabaseManager::InitDatabase()
+    QString CreateSystemTable =
+        "CREATE TABLE IF NOT EXISTS SystemInfo ("
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "MasterSalt TEXT NOT NULL, "
+        "EncryptedDek TEXT NOT NULL, "
+        "DekHash TEXT NOT NULL"
+        ");";
+
+    if (!query.exec(CreateSystemTable)) {
+        qDebug() << "Ошибка создания таблицы SystemInfo:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+void DatabaseManager::closeDatabase() {
+    if (m_db.isOpen()) {
+        m_db.close();
+    }
+}
+bool DatabaseManager::ValidateIntegrity() {
+    QSqlQuery Query;
+
+    // Считываем всё строго по порядку увеличения ID
+    if (!Query.exec("SELECT name, secured_text, previous_hash FROM notes ORDER BY id ASC;")) {
+        return false;
+    }
+
+    std::string ExpectedHash = ""; // Для самой первой записи ждем ""
+
+    while (Query.next()) {
+        std::string Name = Query.value(0).toString().toStdString();
+        std::string SecuredText = Query.value(1).toString().toStdString();
+        std::string PreviousHash = Query.value(2).toString().toStdString();
+
+        // Проверяем: совпадает ли то, что записано в базе, с тем, что мы насчитали
+        if (PreviousHash != ExpectedHash) {
+            qDebug() << "КРИТИЧЕСКАЯ ОШИБКА: Цепочка хэшей разорвана!";
+            return false; // Целостность нарушена! Кто-то ковырялся в файле базы
+        }
+
+        // Вычисляем, какой хэш должен быть у СЛЕДУЮЩЕЙ заметки
+        std::string DataToHash = Name + SecuredText + PreviousHash;
+        ExpectedHash = CalculateSHA256(DataToHash);
+    }
+
+    return true; // Всё идеально, база данных чиста и валидна
+}
+// Обрати внимание: теперь принимаем не const Note&, а просто Note&
+bool DatabaseManager::AddNote(Note& note) {
+    if (!m_db.transaction()) return false;
+
+    QSqlQuery Query;
+
+    // 1. УЗНАЕМ ХЭШ ПОСЛЕДНЕЙ ЗАПИСИ НА ДИСКЕ
+    std::string LastNoteHash = ""; // Если база пустая, у первой заметки будет ""
+
+    // Выбираем previous_hash, имя и зашифрованный текст последней добавленной строки
+    if (Query.exec("SELECT name, secured_text, previous_hash FROM notes ORDER BY id DESC LIMIT 1;") && Query.next()) {
+        std::string PrevName = Query.value(0).toString().toStdString();
+        std::string PrevText = Query.value(1).toString().toStdString();
+        std::string PrevRootHash = Query.value(2).toString().toStdString();
+
+        // Хэш текущей строки — это SHA-256 от суммы всех её данных
+        // Мы склеиваем имя, текст и её собственный previous_hash
+        std::string DataToHash = PrevName + PrevText + PrevRootHash;
+        LastNoteHash = CalculateSHA256(DataToHash);
+    }
+
+    // 2. Записываем этот хэш в наш C++ объект, чтобы он зафиксировался
+    note.PreviousHash = LastNoteHash;
+
+    // 3. Безопасно сохраняем всё в базу данных
+    Query.prepare("INSERT INTO notes (name, secured_text, previous_hash) "
+        "VALUES (:Name, :Text, :PrevHash);");
+    Query.bindValue(":Name", QString::fromStdString(note.Name));
+    Query.bindValue(":Text", QString::fromStdString(note.SecuredText));
+    Query.bindValue(":PrevHash", QString::fromStdString(note.PreviousHash));
+
+    if (!Query.exec()) {
+        m_db.rollback();
+        return false;
+    }
+
+    note.Id = Query.lastInsertId().toLongLong();
+    long long generatedId = note.Id;
+    // Записываем теги, используя полученный generatedId
+    Query.prepare("INSERT INTO tags (note_id, tag_name) VALUES (:note_id, :tag_name);");
+    for (const auto& tag : note.Tags) {
+        Query.bindValue(":note_id", generatedId);
+        Query.bindValue(":tag_name", QString::fromStdString(tag));
+
+        if (!Query.exec()) {
+            m_db.rollback();
+            return false;
+        }
+    }
+
+    return m_db.commit();
+}
+bool DatabaseManager::HasCryptoKeys() {
+    QSqlQuery Query;
+    if (Query.exec("SELECT COUNT(*) FROM SystemInfo;") && Query.next()) {
+        return Query.value(0).toInt() > 0;
+    }
+    return false;
+}
+bool DatabaseManager::LoadCryptoKeys(QString& MasterSalt, QString& EncryptedDek, QString& DekHash) {
+    QSqlQuery Query;
+    if (Query.exec("SELECT MasterSalt, EncryptedDek, DekHash FROM SystemInfo LIMIT 1;") && Query.next()) {
+        MasterSalt = Query.value(0).toString();
+        EncryptedDek = Query.value(1).toString();
+        DekHash = Query.value(2).toString();
+        return true;
+    }
+    return false;
+}
+bool DatabaseManager::SaveCryptoKeys(const QString& MasterSalt, const QString& EncryptedDek, const QString& DekHash) {
+    QSqlQuery Query;
+
+    // На всякий случай очищаем таблицу, если там что-то было (хотя при первом запуске она пуста)
+    Query.exec("DELETE FROM SystemInfo;");
+
+    Query.prepare("INSERT INTO SystemInfo (MasterSalt, EncryptedDek, DekHash) "
+        "VALUES (:MasterSalt, :EncryptedDek, :DekHash);");
+    Query.bindValue(":MasterSalt", MasterSalt);
+    Query.bindValue(":EncryptedDek", EncryptedDek);
+    Query.bindValue(":DekHash", DekHash);
+
+    if (!Query.exec()) {
+        qDebug() << "Ошибка сохранения крипто-ключей:" << Query.lastError().text();
+        return false;
+    }
+    return true;
+}
+// Функция теперь принимает четкий ID, который мы берем из note.Id
+bool DatabaseManager::RemoveNote(long long noteId) {
+    QSqlQuery query;
+
+    // База удалит строго ту строку, у которой первичный ключ равен noteId
+    query.prepare("DELETE FROM notes WHERE id = :id;");
+    query.bindValue(":id", noteId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка удаления заметки по ID:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<Note> DatabaseManager::getAllNotes() {
+    std::vector<Note> notesList;
+    std::unordered_map<qlonglong, size_t> idToVectorIndex;
+    QSqlQuery query;
+
+    // Шаг 1: Читаем все заметки (ОБЯЗАТЕЛЬНО запрашиваем столбец id!)
+    if (!query.exec("SELECT id, name, secured_text, previous_hash FROM notes ORDER BY id;")) {
+        qDebug() << "Ошибка чтения заметок:" << query.lastError().text();
+        return notesList;
+    }
+
+    while (query.next()) {
+        // Достаем автоинкрементный ID из первой колонки (индекс 0)
+        qlonglong dbId = query.value(0).toLongLong();
+        std::string name = query.value(1).toString().toStdString();
+        std::string securedText = query.value(2).toString().toStdString();
+        std::string PrevHash = query.value(3).toString().toStdString();
+
+        Note note;
+        note.Id = dbId;
+        note.Name = name;
+        note.SecuredText = securedText;
+        note.PreviousHash = PrevHash;
+        notesList.push_back(note);
+        idToVectorIndex[dbId] = notesList.size() - 1;
+    }
+
+    // Шаг 2: Чтение тегов (остается без изменений, он использует idToVectorIndex)
+    if (!query.exec("SELECT note_id, tag_name FROM tags;")) {
+        qDebug() << "Ошибка чтения тегов:" << query.lastError().text();
+        return notesList;
+    }
+
+    while (query.next()) {
+        qlonglong noteId = query.value(0).toLongLong();
+        std::string tagName = query.value(1).toString().toStdString();
+
+        if (idToVectorIndex.find(noteId) != idToVectorIndex.end()) {
+            size_t vectorIdx = idToVectorIndex[noteId];
+            notesList[vectorIdx].Tags.push_back(tagName);
+        }
+    }
+
+    return notesList;
+}

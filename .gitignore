@@ -1,0 +1,21 @@
+# Кэш сборки и исполняемые файлы (папки CMake, out, build)
+/out/
+/build/
+/.cmake/
+CMakeLists.txt.user
+
+# Файлы компиляции и бинарники
+*.exe
+*.obj
+*.o
+*.a
+*.lib
+
+# База данных приложения (ВАШ СЕЙФ!)
+/SafeData.db
+/data.txt
+
+# Логи и временные файлы VS / VS Code
+/.vs/
+/.vscode/
+*.log
