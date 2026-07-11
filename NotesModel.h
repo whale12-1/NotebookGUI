@@ -50,14 +50,17 @@ public:
         if (!m_Notes || row < 0 || row >= static_cast<int>(m_Notes->size())) return false;
         long long noteId = (*m_Notes)[row].Id;
 
-        // 1. Удаляем из базы данных
+        // 1. Удаляем из базы данных (там же происходит и каскадный пересчет хэшей на диске)
         if (DatabaseManager::instance().RemoveNote(noteId)) {
 
-            // 2. Удаляем из интерфейса
-            // ИСПРАВЛЕНО: заменено на -> во всех операциях с вектором
+            // Уведомляем интерфейс об удалении строки, чтобы она исчезла с экрана
             beginRemoveRows(QModelIndex(), row, row);
             m_Notes->erase(m_Notes->begin() + row);
             endRemoveRows();
+
+            beginResetModel();
+            *m_Notes = DatabaseManager::instance().getAllNotes();
+            endResetModel();
 
             return true;
         }
