@@ -14,6 +14,14 @@ struct Note {
     std::vector<std::string> Tags;   
 };
 
+std::string EncodeBase32(const unsigned char* data, size_t length);
+
+std::string Generate2FASecret(SecureString& outRawSecret);
+
+int GenerateTOTP(const SecureString& secret, long long timeWindow);
+
+bool Verify2FACode(const SecureString& secret, int userCode);
+
 std::string CalculateSHA256(const std::string& input);
 
 std::string EncryptAES(const SecureString& plainText, const SecureString& password, const std::vector<unsigned char>& salt);
