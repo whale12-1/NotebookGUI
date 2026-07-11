@@ -49,6 +49,9 @@ add_executable(NoteBookGUI
     CustomFilterProxyModel.cpp
     DatabaseManager.h 
     DatabaseManager.cpp
+    ProtectedKey.h
+    TwoFactorDialog.h 
+    TwoFactorDialog.cpp
 )
 
 # Линкуем Qt6
