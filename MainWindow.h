@@ -10,6 +10,9 @@
 #include <openssl/crypto.h>
 #include "NotesModel.h"
 #include "CustomFilterProxyModel.h"
+#include "ProtectedKey.h"
+#include "TwoFactorDialog.h"
+#include <memory>
 // ќпережающее объ€вление классов Qt (чтобы не делать кучу #include в хедере)
 class QListWidget;
 class QPushButton;
@@ -31,12 +34,14 @@ public:
 	);
 private slots:
 	void HandleAddNote();
+	void HandleOpen2FASettings();
 	void HandleDecryptNote();
 	void HandleDeleteNote();
 	void HandleChangeMasterPassword();
 	void HandleInactivityLockOut();
 	void ClearSecureClipboard();
 	void OnCopySecretClicked(const QString& secretText);
+
 private:
 	//void RefreshNoteList();
 	void UpdateTagsPanel();
@@ -51,12 +56,13 @@ private:
 	QPushButton* m_DecryptButton;
 	QPushButton* m_DeleteButton;
 	QPushButton* m_ChangePassButton;
+	QPushButton* m_Settings2FABtn;
 
 	QTimer* m_InactivityTimer;
 	FileManager m_FileManager;
-	SecureString m_MasterPassword;
 	std::vector<Note> m_UserNotes;
-	SecureString m_DecryptedDEK;
+	std::unique_ptr<ProtectedKey> m_DecryptedDEK;
+	std::unique_ptr<ProtectedKey> m_MasterPassword;
 	std::string m_DEKHash;
 	/*std::string m_ExpectedMerkleRoot;*/
 	std::string m_ActualEncryptedDEK;
