@@ -170,11 +170,17 @@ bool DatabaseManager::LoadCryptoKeys(QString& MasterSalt, QString& EncryptedDek,
 bool DatabaseManager::SaveCryptoKeys(const QString& MasterSalt, const QString& EncryptedDek, const QString& DekHash) {
     QSqlQuery Query;
 
-    // На всякий случай очищаем таблицу, если там что-то было (хотя при первом запуске она пуста)
-    Query.exec("DELETE FROM SystemInfo;");
+    // Сначала проверяем, есть ли уже запись в таблице
+    if (HasCryptoKeys()) {
+        // Если запись есть, обновляем СТРОГО ключи шифрования, не трогая настройки 2FA!
+        Query.prepare("UPDATE SystemInfo SET MasterSalt = :MasterSalt, EncryptedDek = :EncryptedDek, DekHash = :DekHash;");
+    }
+    else {
+        // Если база чистая (первый запуск), создаем запись с дефолтными 2FA (0 и '')
+        Query.prepare("INSERT INTO SystemInfo (MasterSalt, EncryptedDek, DekHash) "
+            "VALUES (:MasterSalt, :EncryptedDek, :DekHash);");
+    }
 
-    Query.prepare("INSERT INTO SystemInfo (MasterSalt, EncryptedDek, DekHash) "
-        "VALUES (:MasterSalt, :EncryptedDek, :DekHash);");
     Query.bindValue(":MasterSalt", MasterSalt);
     Query.bindValue(":EncryptedDek", EncryptedDek);
     Query.bindValue(":DekHash", DekHash);
@@ -187,18 +193,60 @@ bool DatabaseManager::SaveCryptoKeys(const QString& MasterSalt, const QString& E
 }
 // Функция теперь принимает четкий ID, который мы берем из note.Id
 bool DatabaseManager::RemoveNote(long long noteId) {
+    // 1. Открываем транзакцию, чтобы все изменения были атомарными
+    if (!m_db.transaction()) return false;
+
     QSqlQuery query;
 
-    // База удалит строго ту строку, у которой первичный ключ равен noteId
+    // Шаг A: Удаляем саму заметку (теги удалятся автоматически благодаря ON DELETE CASCADE)
     query.prepare("DELETE FROM notes WHERE id = :id;");
     query.bindValue(":id", noteId);
-
     if (!query.exec()) {
         qDebug() << "Ошибка удаления заметки по ID:" << query.lastError().text();
+        m_db.rollback();
         return false;
     }
 
-    return true;
+    // Шаг B: Вытаскиваем все ОСТАВШИЕСЯ заметки строго по порядку их ID
+    if (!query.exec("SELECT id, name, secured_text FROM notes ORDER BY id ASC;")) {
+        qDebug() << "Ошибка выборки для пересчета хэшей:" << query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
+
+    // Собираем их ID и данные во временный вектор, чтобы освободить query для обновлений
+    struct TempNote { long long id; std::string name; std::string text; };
+    std::vector<TempNote> remainingNotes;
+    while (query.next()) {
+        remainingNotes.push_back({
+            query.value(0).toLongLong(),
+            query.value(1).toString().toStdString(),
+            query.value(2).toString().toStdString()
+            });
+    }
+
+    // Шаг C: Бежим по цепочке с самого начала и обновляем previous_hash на диске
+    std::string expectedHash = ""; // Первая заметка в базе всегда имеет предыдущий хэш ""
+
+    for (const auto& note : remainingNotes) {
+        // Записываем текущий ожидаемый хэш этой заметке
+        query.prepare("UPDATE notes SET previous_hash = :prevHash WHERE id = :id;");
+        query.bindValue(":prevHash", QString::fromStdString(expectedHash));
+        query.bindValue(":id", note.id);
+
+        if (!query.exec()) {
+            qDebug() << "Ошибка обновления хэша для ID" << note.id << ":" << query.lastError().text();
+            m_db.rollback();
+            return false;
+        }
+
+        // Вычисляем, какой хэш должен быть у СЛЕДУЮЩЕЙ за ней заметки
+        std::string dataToHash = note.name + note.text + expectedHash;
+        expectedHash = CalculateSHA256(dataToHash);
+    }
+
+    // Если всё прошло гладко — фиксируем изменения на диске
+    return m_db.commit();
 }
 
 std::vector<Note> DatabaseManager::getAllNotes() {
@@ -245,4 +293,43 @@ std::vector<Note> DatabaseManager::getAllNotes() {
     }
 
     return notesList;
+}
+
+bool DatabaseManager::Is2FAEnabled() {
+    QSqlQuery query;
+    if (query.exec("SELECT Is2FAEnabled FROM SystemInfo LIMIT 1;") && query.next()) {
+        return query.value(0).toInt() == 1;
+    }
+    return false;
+}
+
+bool DatabaseManager::Enable2FA(const std::string& encryptedSecret) {
+    QSqlQuery query;
+    // Так как в SystemInfo всегда только одна строка, мы обновляем её
+    query.prepare("UPDATE SystemInfo SET Is2FAEnabled = 1, Secret2FA = :Secret;");
+    query.bindValue(":Secret", QString::fromStdString(encryptedSecret));
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка включения 2FA в БД:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::Disable2FA() {
+    QSqlQuery query;
+    // Сбрасываем флаг и затираем строку с зашифрованным секретом в базе
+    if (!query.exec("UPDATE SystemInfo SET Is2FAEnabled = 0, Secret2FA = '';")) {
+        qDebug() << "Ошибка отключения 2FA в БД:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+std::string DatabaseManager::GetEncrypted2FASecret() {
+    QSqlQuery query;
+    if (query.exec("SELECT Secret2FA FROM SystemInfo LIMIT 1;") && query.next()) {
+        return query.value(0).toString().toStdString();
+    }
+    return "";
 }
