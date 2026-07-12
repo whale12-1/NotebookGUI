@@ -54,7 +54,9 @@ bool DatabaseManager::initDatabase(const QString& dbName) {
         "Id INTEGER PRIMARY KEY AUTOINCREMENT, "
         "MasterSalt TEXT NOT NULL, "
         "EncryptedDek TEXT NOT NULL, "
-        "DekHash TEXT NOT NULL"
+        "DekHash TEXT NOT NULL, "
+        "Is2FAEnabled INTEGER DEFAULT 0, "  // Новая колонка (0 - выкл, 1 - вкл)
+        "Secret2FA TEXT DEFAULT ''"          // Новая колонка для зашифрованного секрета
         ");";
 
     if (!query.exec(CreateSystemTable)) {
