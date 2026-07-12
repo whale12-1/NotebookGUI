@@ -20,7 +20,7 @@ public:
 
 private slots:
     void HandleBtnLogin();    
-    void HandleBtnRegister(); 
+    void HandleBtnRegister();
 
 private:
     bool IsStorageExists() const;

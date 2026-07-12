@@ -519,7 +519,7 @@ void MainWindow::HandleOpen2FASettings() {
                     std::vector<unsigned char> saltVector(m_RandomSalt.begin(), m_RandomSalt.end());
 
                     // Используем для шифрования сохраненную строку ключа из сессии
-                    std::string encryptedSecret = EncryptAES(rawSecret, m_MasterPassword->data(), saltVector);
+                    std::string encryptedSecret = EncryptAES(rawSecret, m_DecryptedDEK->data(), saltVector);
 
                     if (DatabaseManager::instance().Enable2FA(encryptedSecret)) {
                         QMessageBox::information(&codeShowDialog, "Успех", "2FA успешно активирована!");

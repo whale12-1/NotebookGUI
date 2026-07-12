@@ -9,6 +9,8 @@
 #include <sstream>
 #include <QString>
 #include <QByteArray>
+#include <QDebug>
+#include <QDateTime>
 #include <algorithm>
 #include <iomanip>
 #include <memory>
@@ -35,26 +37,28 @@ std::string EncodeBase32(const unsigned char* data, size_t length) {
 		buffer <<= (5 - bitsLeft);
 		result.push_back(alphabet[buffer & 0x1F]);
 	}
+
+	// Добавляем выравнивание '=' до кратности 8 символов (стандарт RFC)
+	while (result.length() % 8 != 0) {
+		result.push_back('=');
+	}
 	return result;
 }
 std::string Generate2FASecret(SecureString& outRawSecret) {
-	const size_t secretLengthBytes = 10; // 10 сырых байт
+	const size_t secretLengthBytes = 10; // 10 сырых байт дают 16 символов Base32
 	unsigned char buffer[secretLengthBytes];
 
-	// Криптостойкий генератор OpenSSL. На выходе получаем абсолютно случайный шум.
 	if (RAND_bytes(buffer, secretLengthBytes) != 1) {
 		throw std::runtime_error("Ошибка генерации случайных чисел OpenSSL");
 	}
 
-	// 1. Сохраняем сырые байты в безопасную строку для приложения
-	outRawSecret = SecureString((char*)buffer, secretLengthBytes);
+	// Сохраняем строго бинарные данные
+	outRawSecret = SecureString(reinterpret_cast<const char*>(buffer), secretLengthBytes);
 
-	// 2. Кодируем в Base32 для передачи пользователю (будет ровно 16 символов)
+	// Кодируем в текст для пользователя
 	std::string base32String = EncodeBase32(buffer, secretLengthBytes);
 
-	// Очищаем временный буфер в стеке ради безопасности
 	OPENSSL_cleanse(buffer, secretLengthBytes);
-
 	return base32String;
 }
 
@@ -78,30 +82,45 @@ int GenerateTOTP(const SecureString& secret, long long timeWindow) {
 	unsigned char hmacResult[20];
 	unsigned int hmacLength = 0;
 
-	// Переводим временное окно в байты (Big Endian, как требует стандарт)
+	// Переводим временное окно в байты (Big Endian)
 	unsigned char challenge[8];
 	for (int i = 7; i >= 0; i--) {
 		challenge[i] = timeWindow & 0xFF;
 		timeWindow >>= 8;
 	}
 
-	// Считаем HMAC-SHA1
+	// Считаем HMAC-SHA1 от СЫРЫХ байт секрета
 	HMAC(EVP_sha1(), secret.data(), secret.length(), challenge, 8, hmacResult, &hmacLength);
 
-	// Динамическое усечение (Dynamic Truncation) по стандарту RFC 4226
+	// Динамическое усечение (Dynamic Truncation) RFC 4226
 	int offset = hmacResult[19] & 0xF;
 	int binCode = ((hmacResult[offset] & 0x7F) << 24) |
 		((hmacResult[offset + 1] & 0xFF) << 16) |
 		((hmacResult[offset + 2] & 0xFF) << 8) |
 		(hmacResult[offset + 3] & 0xFF);
 
-	return binCode % 1000000; // Получаем 6 цифр
+	return binCode % 1000000;
 }
 bool Verify2FACode(const SecureString& secret, int userCode) {
 	long long currentTime = std::time(nullptr);
-	long long timeWindow = currentTime / 30; // 30-секундные интервалы
+	long long timeWindow = currentTime / 30;
 
-	// Проверяем текущее окно, а также предыдущее и следующее (на случай рассинхронизации часов)
+	// --- ОТЛАДКА НАЧАЛО ---
+	qDebug() << "=== ПРОВЕРКА КОДА ===";
+	qDebug() << "Время на ПК (UNIX):" << currentTime;
+	qDebug() << "Длина секрета в байтах:" << secret.length();
+
+	// Переведем секрет в HEX, чтобы посмотреть, что внутри
+	QString hexSecret;
+	for (size_t i = 0; i < secret.length(); ++i) {
+		hexSecret += QString("%1").arg((unsigned char)secret[i], 2, 16, QChar('0'));
+	}
+	qDebug() << "Секрет в HEX:" << hexSecret;
+	qDebug() << "Код от пользователя:" << userCode;
+	qDebug() << "Код, который считает ПК для текущего окна:" << GenerateTOTP(secret, timeWindow);
+	qDebug() << "=====================";
+	// --- ОТЛАДКА КОНЕЦ ---
+
 	for (int errorRange = -1; errorRange <= 1; errorRange++) {
 		if (GenerateTOTP(secret, timeWindow + errorRange) == userCode) {
 			return true;
