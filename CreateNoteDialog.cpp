@@ -10,6 +10,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QMessageBox>
+#include <QToolBar>
+#include <QAction>
 
 CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Создание новой заметки");
@@ -24,6 +26,44 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     MainLayout->addWidget(NameLabel);
     MainLayout->addWidget(m_NameInput);
 
+    QToolBar* mdToolBar = new QToolBar("Форматирование", this);
+    mdToolBar->setStyleSheet("QToolBar { background-color: #252526; padding: 2px; border-radius: 4px; }");
+
+    // Кнопка Жирный текст (Bold)
+    QAction* boldAction = mdToolBar->addAction("B");
+    boldAction->setToolTip("Жирный текст");
+    connect(boldAction, &QAction::triggered, this, [this]() {
+        QTextCursor cursor = m_TextInput->textCursor();
+        if (!cursor.hasSelection()) return;
+
+        QTextCharFormat format;
+        // Если текст уже жирный — убираем, если нет — делаем жирным (переключатель)
+        format.setFontWeight(cursor.charFormat().fontWeight() == QFont::Bold ? QFont::Normal : QFont::Bold);
+        cursor.mergeCharFormat(format);
+        });
+
+    // Кнопка Курсив (Italic)
+    QAction* italicAction = mdToolBar->addAction("/");
+    italicAction->setToolTip("Курсив");
+    connect(italicAction, &QAction::triggered, this, [this]() {
+        QTextCursor cursor = m_TextInput->textCursor();
+        if (!cursor.hasSelection()) return;
+
+        QTextCharFormat format;
+        format.setFontItalic(!cursor.charFormat().fontItalic());
+        cursor.mergeCharFormat(format);
+        });
+
+    // Кнопка Блок кода (Code Block)
+    QAction* codeAction = mdToolBar->addAction("</>");
+    codeAction->setToolTip("Блок кода");
+    connect(codeAction, &QAction::triggered, this, [this]() {
+        QTextCursor cursor = m_TextInput->textCursor();
+        cursor.insertText("\n```cpp\n// Ваш код здесь\n```\n");
+        });
+
+    // Добавляем панель инструментов в разметку перед полем ввода текста!
+    MainLayout->addWidget(mdToolBar);
     // 2. Поле ввода текста заметки
     QLabel* TextLabel = new QLabel("Содержимое (текст):",this);
     m_TextInput = new QTextEdit(this);
@@ -171,7 +211,7 @@ std::string CreateNoteDialog::GetName() const{
 }
 
 SecureString CreateNoteDialog::GetText() const {
-    return QStringToSecureString(m_TextInput->toPlainText().trimmed());
+    return QStringToSecureString(m_TextInput->toMarkdown().trimmed());
 }
 bool CreateNoteDialog::IsAutoEncryptChecked() const{
     return m_AutoEncryptCheck->isChecked();
