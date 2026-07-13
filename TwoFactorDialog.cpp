@@ -1,35 +1,35 @@
-#include "TwoFactorDialog.h"
+п»ї#include "TwoFactorDialog.h"
 #include <QIntValidator>
 #include <QHBoxLayout>
 
 TwoFactorAuthDialog::TwoFactorAuthDialog(QWidget* parent) : QDialog(parent) {
-    // Настройки самого окна
+    // РќР°СЃС‚СЂРѕР№РєРё СЃР°РјРѕРіРѕ РѕРєРЅР°
     setObjectName("TwoFactorAuthDialog");
-    setWindowTitle("Проверка безопасности");
-    setFixedSize(320, 180); // Фиксированный размер, чтобы окошко было аккуратным
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint); // Убираем знак вопроса из заголовка
+    setWindowTitle("РџСЂРѕРІРµСЂРєР° Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё");
+    setFixedSize(320, 180); // Р¤РёРєСЃРёСЂРѕРІР°РЅРЅС‹Р№ СЂР°Р·РјРµСЂ, С‡С‚РѕР±С‹ РѕРєРѕС€РєРѕ Р±С‹Р»Рѕ Р°РєРєСѓСЂР°С‚РЅС‹Рј
+    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint); // РЈР±РёСЂР°РµРј Р·РЅР°Рє РІРѕРїСЂРѕСЃР° РёР· Р·Р°РіРѕР»РѕРІРєР°
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(20, 20, 20, 20);
     mainLayout->setSpacing(15);
 
-    // Информационный текст
-    QLabel* infoLabel = new QLabel("Введите 6-значный код из приложения\nGoogle Authenticator:", this);
+    // РРЅС„РѕСЂРјР°С†РёРѕРЅРЅС‹Р№ С‚РµРєСЃС‚
+    QLabel* infoLabel = new QLabel("Р’РІРµРґРёС‚Рµ 6-Р·РЅР°С‡РЅС‹Р№ РєРѕРґ РёР· РїСЂРёР»РѕР¶РµРЅРёСЏ\nGoogle Authenticator:", this);
     infoLabel->setAlignment(Qt::AlignCenter);
     infoLabel->setStyleSheet("color: #2c3e50; font-size: 13px; font-weight: 500;");
     mainLayout->addWidget(infoLabel);
 
-    // Поле ввода кода
+    // РџРѕР»Рµ РІРІРѕРґР° РєРѕРґР°
     m_CodeField = new QLineEdit(this);
     m_CodeField->setObjectName("2FACodeField");
     m_CodeField->setAlignment(Qt::AlignCenter);
     m_CodeField->setPlaceholderText("000 000");
 
-    // Ограничиваем ввод: только цифры, максимум 6 символов
+    // РћРіСЂР°РЅРёС‡РёРІР°РµРј РІРІРѕРґ: С‚РѕР»СЊРєРѕ С†РёС„СЂС‹, РјР°РєСЃРёРјСѓРј 6 СЃРёРјРІРѕР»РѕРІ
     m_CodeField->setValidator(new QIntValidator(0, 999999, this));
     m_CodeField->setMaxLength(6);
 
-    // Делаем шрифт крупным для удобства ввода цифр
+    // Р”РµР»Р°РµРј С€СЂРёС„С‚ РєСЂСѓРїРЅС‹Рј РґР»СЏ СѓРґРѕР±СЃС‚РІР° РІРІРѕРґР° С†РёС„СЂ
     m_CodeField->setStyleSheet(
         "QLineEdit#2FACodeField { "
         "   font-size: 20px; "
@@ -44,22 +44,22 @@ TwoFactorAuthDialog::TwoFactorAuthDialog(QWidget* parent) : QDialog(parent) {
     );
     mainLayout->addWidget(m_CodeField);
 
-    // Блок кнопок (ОК и Отмена)
+    // Р‘Р»РѕРє РєРЅРѕРїРѕРє (РћРљ Рё РћС‚РјРµРЅР°)
     QHBoxLayout* btnLayout = new QHBoxLayout();
     btnLayout->setSpacing(10);
 
-    m_CancelBtn = new QPushButton("Отмена", this);
+    m_CancelBtn = new QPushButton("РћС‚РјРµРЅР°", this);
     m_CancelBtn->setObjectName("2FACancelBtn");
 
-    m_ConfirmBtn = new QPushButton("Подтвердить", this);
+    m_ConfirmBtn = new QPushButton("РџРѕРґС‚РІРµСЂРґРёС‚СЊ", this);
     m_ConfirmBtn->setObjectName("2FAConfirmBtn");
-    m_ConfirmBtn->setDefault(true); // Кнопка будет срабатывать по нажатию Enter
+    m_ConfirmBtn->setDefault(true); // РљРЅРѕРїРєР° Р±СѓРґРµС‚ СЃСЂР°Р±Р°С‚С‹РІР°С‚СЊ РїРѕ РЅР°Р¶Р°С‚РёСЋ Enter
 
     btnLayout->addWidget(m_CancelBtn);
     btnLayout->addWidget(m_ConfirmBtn);
     mainLayout->addLayout(btnLayout);
 
-    // Соединяем сигналы со стандартными слотами QDialog
+    // РЎРѕРµРґРёРЅСЏРµРј СЃРёРіРЅР°Р»С‹ СЃРѕ СЃС‚Р°РЅРґР°СЂС‚РЅС‹РјРё СЃР»РѕС‚Р°РјРё QDialog
     connect(m_ConfirmBtn, &QPushButton::clicked, this, &QDialog::accept);
     connect(m_CancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 }

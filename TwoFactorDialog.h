@@ -1,4 +1,4 @@
-#pragma once
+п»ї#pragma once
 
 #include <QDialog>
 #include <QLineEdit>
@@ -17,6 +17,6 @@ private:
 public:
     explicit TwoFactorAuthDialog(QWidget* parent = nullptr);
 
-    // Метод для получения введенного кода в виде числа
+    // РњРµС‚РѕРґ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ РІРІРµРґРµРЅРЅРѕРіРѕ РєРѕРґР° РІ РІРёРґРµ С‡РёСЃР»Р°
     int GetEnteredCode() const;
 };
