@@ -215,13 +215,6 @@ void MainWindow::InitSession(const SecureString& DecryptedDek,
     m_DEKHash = DekHash;
     m_MasterPassword = std::make_unique<ProtectedKey>(MasterPassword);
     m_RandomSalt = Salt;
-    // СВЕЖАЯ ЛОГИКА: Проверяем цепочку хэшей перед выводом данных на экран!
-    if (!DatabaseManager::instance().ValidateIntegrity()) {
-        QMessageBox::critical(this, "Критическая ошибка",
-            "Обнаружено несанкционированное изменение данных Сейфа (цепочка хэшей разорвана). Доступ заблокирована!");
-        QTimer::singleShot(0, this, &QWidget::close); // Безопасно закрываем приложение
-        return;
-    }
     m_NotesModel->PopulateFromDatabase();
 
     // Твой старый код отрисовки интерфейса и запуска таймера активности...
