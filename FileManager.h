@@ -8,20 +8,20 @@ class FileManager {
 public:
     explicit FileManager(const std::string& filePath);
 
-    // Сохранение всей сессии в файл
-    bool SaveSession(const std::vector<Note>& UserNotes,       // Добавили ссылку & для скорости
-        const std::string& EncryptedDEK,
-        const std::string& Salt,
-        std::string& expectedMerkleRoot,
-        const std::string& DEKHash
+    // Экспорт (сохранение) бэкапа в зашифрованный JSON
+    bool SaveBackup(
+        const std::vector<Note>& userNotes,
+        const std::string& encryptedDEK,
+        const std::string& salt,
+        const std::string& dekHash
     );
-    // Загрузка сессии из файла (параметры передаются по ссылкам для заполнения)
-    bool LoadSession(
-        std::vector<Note>& UserNotes,
-        std::string& EncryptedDEK, 
-        std::string& PreviousHash, 
-        std::string& Salt,
-        std::string& DEKHash
+
+    // Импорт (загрузка) бэкапа из файла
+    bool LoadBackup(
+        std::vector<Note>& userNotes,
+        std::string& encryptedDEK,
+        std::string& salt,
+        std::string& dekHash
     );
 
 private:
