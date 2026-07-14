@@ -1,289 +1,383 @@
-/* === style.qss === */
-
-/* Главное окно и базовые контейнеры */
+п»ї/* ==========================================================================
+   Р“Р›РћР‘РђР›Р¬РќР«Р• РќРђРЎРўР РћР™РљР Р РћРљРќРђ
+   ========================================================================== */
 QMainWindow, QDialog {
-    background-color: #fcfcfc;
-    color: #2b2d42;
-    font-family: "Segoe UI", sans-serif;
+    background-color: #12131a; /* Р“Р»СѓР±РѕРєРёР№ С‚РµРјРЅРѕ-СЃРµСЂС‹Р№, РїРѕС‡С‚Рё С‡РµСЂРЅС‹Р№ */
+    color: #e2e8f0;            /* РњСЏРіРєРёР№ Р±РµР»С‹Р№ С‚РµРєСЃС‚ */
+    font-family: "Segoe UI", -apple-system, sans-serif;
 }
 
-/* Строка поиска */
-QLineEdit {
-    background-color: #f1f3f5;
-    border: 1px solid #e9ecef;
+/* Р’РєР»Р°РґРєРё (РґР»СЏ РѕРєРЅР° РЅР°СЃС‚СЂРѕРµРє SettingsDialog) */
+QTabWidget::pane {
+    border: 1px solid #232530;
+    background-color: #1a1c24;
     border-radius: 8px;
-    padding: 8px 12px;
-    color: #2b2d42;
+    top: -1px;
+}
+QTabBar::tab {
+    background-color: #12131a;
+    color: #94a3b8;
+    padding: 8px 16px;
+    border: 1px solid #232530;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #1a1c24;
+    color: #7289da;
+    border-color: #232530;
+    font-weight: bold;
+}
+QTabBar::tab:hover:!selected {
+    background-color: #1e212b;
+    color: #e2e8f0;
+}
+
+/* Р­Р»РµРјРµРЅС‚С‹ РёРЅС‚РµСЂС„РµР№СЃР° (Р§РµРєР±РѕРєСЃС‹, РЎС‚Р°С‚РёС‡РµСЃРєРёРµ С‚РµРєСЃС‚С‹) */
+QCheckBox {
+    color: #e2e8f0;
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid #4a4f66;
+    border-radius: 4px;
+    background-color: #1a1c24;
+}
+QCheckBox::indicator:checked {
+    background-color: #7289da;
+    border-color: #7289da;
+    /* РЎРёРјРІРѕР» РіР°Р»РѕС‡РєРё */
+    image: url(:/icons/checkmark.svg); /* Р•СЃР»Рё РёРєРѕРЅРѕРє РЅРµС‚, Qt РѕС‚СЂРёСЃСѓРµС‚ РґРµС„РѕР»С‚ РїРѕРІРµСЂС… С„РѕРЅР° */
+}
+QCheckBox::indicator:hover {
+    border-color: #7289da;
+}
+
+QLabel {
+    color: #94a3b8; /* РџСЂРёРіР»СѓС€РµРЅРЅС‹Р№ СЃРµСЂС‹Р№ РґР»СЏ РѕРїРёСЃР°РЅРёР№ */
+}
+
+
+/* ==========================================================================
+   РџРћР›РЇ Р’Р’РћР”Рђ (РџРћРРЎРљ Р РџРђР РћР›Р)
+   ========================================================================== */
+QLineEdit {
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 8px;
+    padding: 8px 14px;
+    color: #f1f5f9;
+    font-size: 13px;
 }
 QLineEdit:focus {
-    background-color: #ffffff;
-    border: 1px solid #ced4da;
+    border: 1.5px solid #7289da; /* РќРµРѕРЅРѕРІР°СЏ РїРѕРґСЃРІРµС‚РєР° РїСЂРё СЂР°Р±РѕС‚Рµ */
+    background-color: #1e212b;
+}
+QLineEdit::placeholder {
+    color: #64748b;
 }
 
-/* Список заметок */
+
+/* ==========================================================================
+   РЎРџРРЎРћРљ Р—РђРњР•РўРћРљ (РљРђР РўРћР§РљР)
+   ========================================================================== */
 QListView {
-    background-color: #ffffff;
-    border: 1px solid #e9ecef;
-    border-radius: 12px;
-    padding: 6px;
-    outline: 0; /* Отключаем рамку фокуса Windows */
+    background-color: #12131a;
+    border: none;
+    padding: 4px;
+    outline: 0;
 }
 
-/* 1. ОБЫЧНОЕ СОСТОЯНИЕ (Явно пишем !important и состояние !selected) */
+/* РћР±С‹С‡РЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РєР°СЂС‚РѕС‡РєРё Р·Р°РјРµС‚РєРё */
 QListView::item {
-    padding: 12px 16px;
-    border-radius: 8px;
-    color: #4a4e69;
-    margin-bottom: 6px;
-    background-color: #f0f2f5; 
-    border: 1px solid #e2e5e9;
+    background-color: #1a1c24; 
+    border: 1.5px solid #232530;
+    border-radius: 10px;
+    padding: 14px 18px;
+    color: #cbd5e1;
+    margin-bottom: 8px;
 }
 
+/* РќР°РІРµРґРµРЅРёРµ РЅР° РєР°СЂС‚РѕС‡РєСѓ */
 QListView::item:hover {
-    background-color: #e8ebea; 
-    border-color: #dbdee2;
-    color: #2b2d42;
+    background-color: #1e212b;
+    border-color: #3b4252;
+    color: #f1f5f9;
 }
 
-/* 2. ВЫДЕЛЕННОЕ СОСТОЯНИЕ (Перебиваем абсолютно все комбинации) */
+/* Р’С‹РґРµР»РµРЅРЅР°СЏ РєР°СЂС‚РѕС‡РєР° (РђРєС‚РёРІРЅР°СЏ Р·Р°РјРµС‚РєР°) */
 QListView::item:selected,
 QListView::item:selected:active,
-QListView::item:selected:not-active,
 QListView::item:selected:!active {
-    background-color: #ced4da !important; /* Плотный красивый пастельно-серый цвет при клике */
-    border: 1px solid #adb5bd !important;  /* Более темная рамка выделения */
-    color: #212529 !important;             /* Темный читаемый текст */
+    background-color: #2e3440 !important; /* РљРѕРЅС‚СЂР°СЃС‚РЅС‹Р№ РіСЂР°С„РёС‚РѕРІС‹Р№ */
+    border: 1.5px solid #7289da !important;  /* РђРєС†РµРЅС‚РЅР°СЏ С„РёРѕР»РµС‚РѕРІР°СЏ СЂР°РјРєР° */
+    color: #ffffff !important;
     font-weight: 600;
 }
 
-/* Наведение на уже выделенный элемент */
 QListView::item:selected:hover {
-    background-color: #b0b7bd !important;
-    border-color: #8a939b !important;
+    background-color: #3b4252 !important;
+    border-color: #7289da !important;
 }
 
-/* 3. КНОПКИ ГЛАВНОГО ОКНА */
-QMainWindow QPushButton {
-    background-color: #ffffff;
-    border: 1px solid #e9ecef;
+
+/* ==========================================================================
+   РљРќРћРџРљР
+   ========================================================================== */
+/* Р”РµС„РѕР»С‚РЅР°СЏ РєРЅРѕРїРєР° */
+QPushButton {
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
     border-radius: 8px;
-    color: #4a4e69;
-    padding: 10px 16px; 
+    color: #cbd5e1;
+    padding: 8px 16px;
     font-size: 13px;
     font-weight: 600;
 }
-QMainWindow QPushButton:hover {
-    background-color: #f8f9fa;
-    color: #2b2d42;
-    border-color: #ced4da;
+QPushButton:hover {
+    background-color: #232530;
+    color: #ffffff;
+    border-color: #4a4f66;
 }
-QMainWindow QPushButton:pressed {
-    background-color: #e9ecef;
+QPushButton:pressed {
+    background-color: #12131a;
 }
 
-/* Пастельная кнопка удаления в главном окне */
+/* РљРЅРѕРїРєРё РІРЅСѓС‚СЂРё QMainWindow (Р“Р»Р°РІРЅС‹Р№ СЌРєСЂР°РЅ) */
+QMainWindow QPushButton {
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+}
+
+/* РћРїР°СЃРЅРѕРµ РґРµР№СЃС‚РІРёРµ вЂ” РљРЅРѕРїРєР° СѓРґР°Р»РµРЅРёСЏ */
 QMainWindow QPushButton#m_DeleteButton {
-    background-color: #fec5bb;
-    border: 1px solid #fcd5ce;
-    color: #9e5252;
+    background-color: #2a1a1f;
+    border: 1.5px solid #4c1d24;
+    color: #fca5a5;
 }
 QMainWindow QPushButton#m_DeleteButton:hover {
-    background-color: #fcd5ce;
-}
-QPushButton[text="+"] {
-    background-color: #f1f3f5;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    font-weight: bold;
-    color: #495057;
-}
-QPushButton[text="+"]:hover {
-    background-color: #e2e5e9;
+    background-color: #4c1d24;
+    color: #ffffff;
+    border-color: #ef4444;
 }
 
-/* Плашки тегов внутри диалога (с крестиком) */
-QPushButton#DialogTagButton {
-    background-color: #e8ebea; /* Мягкий пастельный цвет */
-    border: 1px solid #d3dad5;
-    border-radius: 12px;
-    color: #495057;
-    padding: 3px 8px;
-    font-size: 11px;
+/* РњР°Р»РµРЅСЊРєРёРµ РєРІР°РґСЂР°С‚РЅС‹Рµ РєРЅРѕРїРєРё СѓРїСЂР°РІР»РµРЅРёСЏ (Р”РѕР±Р°РІРёС‚СЊ "+", РќР°СЃС‚СЂРѕР№РєРё, РРјРїРѕСЂС‚) */
+QPushButton[text="+"], 
+QPushButton#AddTagButton {
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 6px;
+    font-weight: bold;
+    color: #7289da;
+    font-size: 16px;
+    padding: 0px;
 }
-/* При наведении плашка становится нежно-розовой, намекая на удаление */
-QPushButton#DialogTagButton:hover {
-    background-color: #fec5bb; 
-    border-color: #fcd5ce;
-    color: #9e5252;
+QPushButton[text="+"]:hover, 
+QPushButton#AddTagButton:hover {
+    background-color: #7289da;
+    color: #ffffff;
+    border-color: #7289da;
 }
+
+/* РљСЂСѓРіР»С‹Рµ РїР»Р°С€РєРё С‚РµРіРѕРІ РІ СЃРїРёСЃРєРµ */
 QPushButton#TagButton {
-    background-color: #e9ecef;
+    background-color: #232530;
     border: none;
-    border-radius: 14px; /* Делаем их круглыми капсулами */
-    color: #495057;
-    padding: 5px 12px;
+    border-radius: 12px;
+    color: #94a3b8;
+    padding: 4px 12px;
     font-size: 11px;
     font-weight: 600;
 }
 QPushButton#TagButton:hover {
-    background-color: #dee2e6;
-    color: #212529;
+    background-color: #2e3440;
+    color: #7289da;
 }
 QPushButton#TagButton:pressed {
-    background-color: #ced4da;
-    /* При нажатии тег будет окрашиваться в цвет выделения */
-    background-color: #b0b7bd; 
-}
-QPushButton#AddTagButton {
-    background-color: #f1f3f5;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    font-size: 16px;       /* Делаем плюс чуть крупнее */
-    font-weight: bold;
-    color: #495057;        /* Четкий темно-серый цвет текста */
-    padding: 0px;          /* Обнуляем отступы, чтобы текст не выдавливало за границы */
-    text-align: center;    /* Центрируем плюс */
+    background-color: #7289da;
+    color: #ffffff;
 }
 
-QPushButton#AddTagButton:hover {
-    background-color: #e2e5e9;
-    color: #212529;
+/* РўРµРіРё РІРЅСѓС‚СЂРё РґРёР°Р»РѕРіР° (СЃ РІРѕР·РјРѕР¶РЅРѕСЃС‚СЊСЋ СѓРґР°Р»РµРЅРёСЏ РїСЂРё РЅР°РІРµРґРµРЅРёРё) */
+QPushButton#DialogTagButton {
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 10px;
+    color: #cbd5e1;
+    padding: 3px 8px;
+    font-size: 11px;
+}
+QPushButton#DialogTagButton:hover {
+    background-color: #2a1a1f; 
+    border-color: #4c1d24;
+    color: #fca5a5;
 }
 
-QPushButton#AddTagButton:pressed {
-    background-color: #ced4da;
-}
-/* Настройки самого редактора заметок */
+
+/* ==========================================================================
+   Р Р•Р”РђРљРўРћР  Р—РђРњР•РўРћРљ (TEXT EDIT & TOOLBAR)
+   ========================================================================== */
 QTextEdit {
-    background-color: #1e1e1e;
-    color: #d4d4d4;
-    font-family: "Segoe UI", "Arial", sans-serif;
+    background-color: #1a1c24;
+    color: #e2e8f0;
+    font-family: "Consolas", "Courier New", monospace; /* РљРѕРґРёРЅРі-СЃС‚Р°Р№Р» РґР»СЏ Р·Р°РјРµС‚РѕРє */
     font-size: 14px;
-    line-height: 1.5;
-    border: 1px solid #3c3c3c;
-    border-radius: 4px;
-    padding: 10px;
+    line-height: 1.6;
+    border: 1.5px solid #232530;
+    border-radius: 8px;
+    padding: 12px;
+}
+QTextEdit:focus {
+    border-color: #7289da;
 }
 
-/* Стилизация панели форматирования */
+/* РџР°РЅРµР»СЊ РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ */
 QToolBar {
-    background-color: #252526;
-    border: 1px solid #3c3c3c;
+    background-color: #12131a;
+    border: 1.5px solid #232530;
     border-bottom: none;
-    spacing: 5px;
-    padding: 4px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    spacing: 6px;
+    padding: 6px;
 }
-
 QToolButton {
     background-color: transparent;
-    color: #ffffff;
-    font-weight: bold;
-    border-radius: 3px;
+    color: #94a3b8;
+    border-radius: 4px;
     padding: 4px 8px;
 }
-
 QToolButton:hover {
-    background-color: #37373d;
+    background-color: #232530;
+    color: #ffffff;
 }
-
 QToolButton:pressed {
-    background-color: #007acc;
+    background-color: #7289da;
+    color: #ffffff;
 }
 
-/* Стили для окна просмотра расшифрованной заметки */
+
+/* ==========================================================================
+   РћРљРќРћ РџР РћРЎРњРћРўР Рђ Р РђРЎРЁРР¤Р РћР’РђРќРќРћР™ Р—РђРњР•РўРљР (DECRYPT DIALOG)
+   ========================================================================== */
 QDialog#DecryptViewDialog {
-    background-color: #f7f9fa; /* Мягкий пастельный светло-серый фон */
+    background-color: #12131a;
 }
-
-/* Поле с текстом заметки */
 QTextEdit#DecryptViewer {
-    background-color: #ffffff;
-    color: #2c3e50; /* Приятный для чтения темно-серый цвет текста */
-    border: 1px solid #e4e7ed;
-    border-radius: 8px;
-    padding: 12px; /* Чтобы текст не прилипал к краям */
+    background-color: #1a1c24;
+    color: #f1f5f9;
+    border: 1.5px solid #232530;
+    border-radius: 10px;
+    padding: 14px;
     font-size: 14px;
 }
-
-/* Кнопка закрытия внутри этого окна */
 QPushButton#DecryptCloseBtn {
-    background-color: #ffffff;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    padding: 6px 16px;
-    color: #606266;
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 8px;
+    padding: 8px 18px;
+    color: #94a3b8;
     font-weight: bold;
 }
-
 QPushButton#DecryptCloseBtn:hover {
-    background-color: #f5f7fa;
-    color: #409eff;
-    border-color: #c0c4cc;
+    background-color: #232530;
+    color: #ffffff;
+    border-color: #4a4f66;
 }
 
+
+/* ==========================================================================
+   РћРљРќРћ 2FA Р РЎРРЎРўР•РњРќР«Р• РљРќРћРџРљР
+   ========================================================================== */
 QDialog#TwoFactorAuthDialog {
-    background-color: #f7f9fa;
+    background-color: #12131a;
 }
-
-/* Кнопки диалога 2FA */
 QPushButton#2FAConfirmBtn {
-    background-color: #409eff;
-    color: white;
+    background-color: #10b981; /* Р­Р»РµРіР°РЅС‚РЅС‹Р№ РёР·СѓРјСЂСѓРґРЅРѕ-Р·РµР»РµРЅС‹Р№ РІРјРµСЃС‚Рѕ РєРёСЃР»РѕС‚РЅРѕРіРѕ */
+    color: #ffffff;
     border: none;
-    border-radius: 6px;
-    padding: 8px 16px;
+    border-radius: 8px;
+    padding: 8px 18px;
     font-weight: bold;
 }
-
 QPushButton#2FAConfirmBtn:hover {
-    background-color: #66b1ff;
+    background-color: #059669;
 }
 
 QPushButton#2FACancelBtn {
-    background-color: #ffffff;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    padding: 8px 16px;
-    color: #606266;
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 8px;
+    padding: 8px 18px;
+    color: #cbd5e1;
+}
+QPushButton#2FACancelBtn:hover {
+    background-color: #232530;
+    border-color: #4a4f66;
+    color: #ffffff;
 }
 
-QPushButton#2FACancelBtn:hover {
-    background-color: #f5f7fa;
-    border-color: #c0c4cc;
+/* РљРЅРѕРїРєРё-РёРєРѕРЅРєРё РІ РёРЅС‚РµСЂС„РµР№СЃРµ (РЁРµСЃС‚РµСЂРµРЅРєРё, Р±СЌРєР°РїС‹) */
+
+QPushButton#btnImportBackup {
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 8px;
+    color: #94a3b8;
+    
+    /* Р–РµСЃС‚РєРѕ Р·Р°РґР°РµРј СЂР°Р·РјРµСЂС‹, С‡С‚РѕР±С‹ layout РЅРµ СЂР°СЃС‚СЏРіРёРІР°Р» РµС‘ РЅР° РїРѕР»-СЌРєСЂР°РЅР° */
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    
+    padding: 0px;
+}
+
+QPushButton#btnImportBackup:hover {
+    background-color: #232530;
+    color: #7289da;
+    border-color: #7289da;
+}
+
+QPushButton#btnImportBackup:pressed {
+    background-color: #12131a;
+}
+
+/* РЈР±РёСЂР°РµРј СЃС‚СЂРµР»РѕС‡РєСѓ РјРµРЅСЋ (РёРЅРґРёРєР°С‚РѕСЂ), РµСЃР»Рё РєРЅРѕРїРєР° РёСЃРїРѕР»СЊР·СѓРµС‚ QMenu */
+QPushButton#btnImportBackup::menu-indicator {
+    image: none;
+    width: 0px;
+    subcontrol-position: right center;
 }
 
 QPushButton#Settings2FABtn {
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    font-size: 16px; /* Размер эмодзи-иконки, если нет картинки */
-    padding: 2px;
+    background-color: #1a1c24;
+    border: 1.5px solid #232530;
+    border-radius: 8px;
+    color: #94a3b8;
+    
+    /* РўРѕС‡РЅС‹Рµ СЂР°Р·РјРµСЂС‹ РєРІР°РґСЂР°С‚РЅРѕР№ РєРЅРѕРїРєРё */
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    
+    font-size: 18px; /* РћРїС‚РёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РґР»СЏ СЃРёРјРІРѕР»Р° вљ™ */
+    padding: 0px;
+    text-align: center;
 }
 
 QPushButton#Settings2FABtn:hover {
-    background-color: #e4e7ed; /* Легкое пастельное подсвечивание при наведении */
+    background-color: #232530;
+    color: #7289da;
+    border-color: #7289da;
 }
 
 QPushButton#Settings2FABtn:pressed {
-    background-color: #dcdfe6;
-}
-
-/* Кнопка-шестеренка импорта бэкапа */
-QPushButton#btnImportBackup {
-    border: none;
-    background-color: transparent;
-    color: #555555;
-    font-size: 18px;
-    border-radius: 4px;
-}
-
-/* Эффект при наведении курсора */
-QPushButton#btnImportBackup:hover {
-    background-color: #e0e0e0;
-    color: #111111;
-}
-
-/* Эффект при нажатии */
-QPushButton#btnImportBackup:pressed {
-    background-color: #d0d0d0;
+    background-color: #12131a;
 }
