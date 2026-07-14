@@ -52,6 +52,10 @@ add_executable(NoteBookGUI
     ProtectedKey.h
     TwoFactorDialog.h 
     TwoFactorDialog.cpp
+    PasswordInput.h    
+    PasswordInput.cpp  
+    SettingsDialog.h
+    SettingsDialog.cpp
 )
 
 # Линкуем Qt6
