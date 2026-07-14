@@ -267,3 +267,23 @@ QPushButton#Settings2FABtn:hover {
 QPushButton#Settings2FABtn:pressed {
     background-color: #dcdfe6;
 }
+
+/* Кнопка-шестеренка импорта бэкапа */
+QPushButton#btnImportBackup {
+    border: none;
+    background-color: transparent;
+    color: #555555;
+    font-size: 18px;
+    border-radius: 4px;
+}
+
+/* Эффект при наведении курсора */
+QPushButton#btnImportBackup:hover {
+    background-color: #e0e0e0;
+    color: #111111;
+}
+
+/* Эффект при нажатии */
+QPushButton#btnImportBackup:pressed {
+    background-color: #d0d0d0;
+}
