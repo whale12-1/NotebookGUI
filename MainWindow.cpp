@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.h"
 #include "AuthWindow.h"
+#include "SettingsDialog.h"
 // Разметки (Layouts) для красивого расположения кнопок
 #include <QVBoxLayout>   
 #include <QHBoxLayout>   
@@ -90,15 +91,15 @@ MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("dat
     // 3. Соединяем их вместе! Теперь View смотрит на мир через призму нашей модели
     m_NotesView->setModel(m_ProxyModel);
 
-    m_Settings2FABtn = new QPushButton(this);
-    m_Settings2FABtn->setObjectName("Settings2FABtn");
-    m_Settings2FABtn->setToolTip("Настройки двухфакторной аутентификации (2FA)");
-    m_Settings2FABtn->setFixedSize(24, 24);
-    m_Settings2FABtn->setText("🛡️");
+    m_SettingsBtn = new QPushButton(this);
+    m_SettingsBtn->setObjectName("Settings2FABtn");
+    m_SettingsBtn->setToolTip("Настройки двухфакторной аутентификации (2FA)");
+    m_SettingsBtn->setFixedSize(24, 24);
+    m_SettingsBtn->setText("🛡️");
 
     QHBoxLayout* topBarLayout = new QHBoxLayout();
     topBarLayout->setContentsMargins(5, 5, 5, 0); // Небольшие отступы сверху и сбоку
-    topBarLayout->addWidget(m_Settings2FABtn, 0, Qt::AlignLeft); // Прижимаем строго влево
+    topBarLayout->addWidget(m_SettingsBtn, 0, Qt::AlignLeft); // Прижимаем строго влево
     topBarLayout->addStretch();
 
     MainLayout->insertLayout(0, topBarLayout);
@@ -132,7 +133,7 @@ MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("dat
     connect(m_InactivityTimer, &QTimer::timeout, this, &MainWindow::HandleInactivityLockOut);
     // Когда текст в строке поиска меняется, прокси-модель автоматически применяет его как фильтр
     connect(m_SearchField, &QLineEdit::textChanged, m_ProxyModel, &QSortFilterProxyModel::setFilterFixedString);
-    connect(m_Settings2FABtn, &QPushButton::clicked, this, &HandleOpen2FASettings);
+    connect(m_SettingsBtn, &QPushButton::clicked, this, &HandleBtnSettingsClicked);
 }
 
 void MainWindow::OnCopySecretClicked(const QString& secretText) {
@@ -414,120 +415,8 @@ void MainWindow::ClearSecureClipboard() {
 }
 
 
-void MainWindow::HandleOpen2FASettings() {
-    // Создаем кастомный диалог настроек 2FA прямо «на лету»
-    QDialog settingsDialog(this);
-    settingsDialog.setWindowTitle("Управление 2FA");
-    settingsDialog.setFixedSize(360, 220);
-    settingsDialog.setStyleSheet(this->styleSheet());
-
-    QVBoxLayout* layout = new QVBoxLayout(&settingsDialog);
-    layout->setContentsMargins(20, 20, 20, 20);
-    layout->setSpacing(15);
-
-    QLabel* statusLabel = new QLabel(&settingsDialog);
-    statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setStyleSheet("font-size: 14px; font-weight: bold;");
-
-    QPushButton* actionBtn = new QPushButton(&settingsDialog);
-    actionBtn->setObjectName("2FAActionBtn");
-    actionBtn->setFixedHeight(35);
-
-    // Проверяем текущее состояние из базы данных
-    bool isEnabled = DatabaseManager::instance().Is2FAEnabled();
-
-    if (isEnabled) {
-        statusLabel->setText("🔒 Двухфакторная защита: АКТИВНА");
-        statusLabel->setStyleSheet("color: #67c23a; font-size: 14px; font-weight: bold;");
-        actionBtn->setText("Отключить 2FA");
-        actionBtn->setStyleSheet("background-color: #f56c6c; color: white; border-radius: 6px; font-weight: bold;");
-    }
-    else {
-        statusLabel->setText("🔓 Двухфакторная защита: ВЫКЛЮЧЕНА");
-        statusLabel->setStyleSheet("color: #909399; font-size: 14px; font-weight: bold;");
-        actionBtn->setText("Включить 2FA");
-        actionBtn->setStyleSheet("background-color: #409eff; color: white; border-radius: 6px; font-weight: bold;");
-    }
-
-    layout->addWidget(statusLabel);
-    layout->addStretch();
-    layout->addWidget(actionBtn);
-
-    // Логика нажатия на кнопку действия
-    connect(actionBtn, &QPushButton::clicked, [&]() {
-        if (isEnabled) {
-            // Если включена — просто отключаем
-            if (DatabaseManager::instance().Disable2FA()) {
-                QMessageBox::information(&settingsDialog, "Успех", "Двухфакторная аутентификация отключена.");
-                settingsDialog.accept();
-            }
-        }
-        else {
-            // Если выключена — запускаем процесс генерации и подтверждения
-            settingsDialog.hide(); // Прячем окно общих настроек
-
-            SecureString rawSecret;
-            std::string displaySecret = Generate2FASecret(rawSecret);
-
-            // Показываем пользователю секретный ключ
-            QDialog codeShowDialog(this);
-            codeShowDialog.setWindowTitle("Настройка Google Authenticator");
-            codeShowDialog.setFixedSize(380, 240);
-            codeShowDialog.setStyleSheet(this->styleSheet());
-
-            QVBoxLayout* cLayout = new QVBoxLayout(&codeShowDialog);
-            QLabel* info = new QLabel("1. Добавьте этот секретный код в ваше мобильное приложение:\n", &codeShowDialog);
-            info->setWordWrap(true);
-
-            // Выделяем Base32 ключ крупным шрифтом
-            QLineEdit* keyField = new QLineEdit(QString::fromStdString(displaySecret), &codeShowDialog);
-            keyField->setReadOnly(true);
-            keyField->setAlignment(Qt::AlignCenter);
-            keyField->setStyleSheet("font-size: 18px; font-weight: bold; letter-spacing: 2px; color: #409eff; background: #f4f4f5; border: 1px dashed #409eff; padding: 5px;");
-
-            QLabel* info2 = new QLabel("\n2. Введите 6-значный код из телефона для подтверждения:", &codeShowDialog);
-
-            TwoFactorAuthDialog verifyDialog(&codeShowDialog);
-            // Используем внутренний инпут из твоего класса прямо здесь или даем поле ввода:
-            QLineEdit* confirmField = new QLineEdit(&codeShowDialog);
-            confirmField->setMaxLength(6);
-            confirmField->setAlignment(Qt::AlignCenter);
-            confirmField->setPlaceholderText("000 000");
-            confirmField->setStyleSheet("font-size: 16px; padding: 5px;");
-
-            QPushButton* saveBtn = new QPushButton("Подтвердить и сохранить", &codeShowDialog);
-            saveBtn->setStyleSheet("background-color: #67c23a; color: white; font-weight: bold; padding: 8px; border-radius: 6px;");
-
-            cLayout->addWidget(info);
-            cLayout->addWidget(keyField);
-            cLayout->addWidget(info2);
-            cLayout->addWidget(confirmField);
-            cLayout->addWidget(saveBtn);
-
-            connect(saveBtn, &QPushButton::clicked, [&]() {
-                int code = confirmField->text().toInt();
-                if (Verify2FACode(rawSecret, code)) {
-                    // Шифруем мастер-паролем или DEK (смотря что доступно в MainWindow сессии)
-                    // Допустим, у тебя в MainWindow сохранен m_MasterPassword или decryptedDEK
-                    std::vector<unsigned char> saltVector(m_RandomSalt.begin(), m_RandomSalt.end());
-
-                    // Используем для шифрования сохраненную строку ключа из сессии
-                    std::string encryptedSecret = EncryptAES(rawSecret, m_DecryptedDEK->data(), saltVector);
-
-                    if (DatabaseManager::instance().Enable2FA(encryptedSecret)) {
-                        QMessageBox::information(&codeShowDialog, "Успех", "2FA успешно активирована!");
-                        codeShowDialog.accept();
-                    }
-                }
-                else {
-                    QMessageBox::critical(&codeShowDialog, "Ошибка", "Неверный код! Попробуйте еще раз.");
-                }
-                });
-
-            codeShowDialog.exec();
-            settingsDialog.accept();
-        }
-        });
-
-    settingsDialog.exec();
+void MainWindow::HandleBtnSettingsClicked() {
+    SettingsDialog Settings(m_UserNotes,m_DecryptedDEK->data(), m_RandomSalt, this);
+    Settings.setStyleSheet(this->styleSheet());
+    Settings.exec();
 }

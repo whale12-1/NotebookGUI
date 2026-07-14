@@ -34,7 +34,7 @@ public:
 	);
 private slots:
 	void HandleAddNote();
-	void HandleOpen2FASettings();
+	void HandleBtnSettingsClicked();
 	void HandleDecryptNote();
 	void HandleDeleteNote();
 	void HandleChangeMasterPassword();
@@ -56,7 +56,7 @@ private:
 	QPushButton* m_DecryptButton;
 	QPushButton* m_DeleteButton;
 	QPushButton* m_ChangePassButton;
-	QPushButton* m_Settings2FABtn;
+	QPushButton* m_SettingsBtn;
 
 	QTimer* m_InactivityTimer;
 	FileManager m_FileManager;
