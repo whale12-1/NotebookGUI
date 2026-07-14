@@ -51,3 +51,4 @@ struct SecureAllocator {
 
 // 4. ќбъ€вл€ем удобный alias (псевдоним) дл€ безопасной строки
 using SecureString = std::basic_string<char, std::char_traits<char>, SecureAllocator<char>>;
+
