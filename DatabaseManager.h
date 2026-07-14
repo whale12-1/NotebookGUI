@@ -27,6 +27,13 @@ public:
     // Получить зашифрованный секрет из базы данных
     std::string GetEncrypted2FASecret();
     // --- ФУНКЦИИ ДЛЯ РАБОТЫ С ЗАМЕТКАМИ ---
+    bool beginTransaction();
+    bool commitTransaction();
+    bool rollbackTransaction();
+
+    bool InsertNoteRaw(Note& note);
+
+
     bool ValidateIntegrity();
     bool LoadCryptoKeys(QString& MasterSalt, QString& EncryptedDek, QString& DekHash);
     bool SaveCryptoKeys(const QString& MasterSalt, const QString& EncryptedDek, const QString& DekHash);

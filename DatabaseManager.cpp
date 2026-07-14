@@ -101,30 +101,12 @@ bool DatabaseManager::ValidateIntegrity() {
     return true; // Всё идеально, база данных чиста и валидна
 }
 // Обрати внимание: теперь принимаем не const Note&, а просто Note&
-bool DatabaseManager::AddNote(Note& note) {
-    if (!m_db.transaction()) return false;
+// DatabaseManager.cpp
 
+// 1. Низкоуровневая вставка (единственное место с SQL-запросом INSERT)
+bool DatabaseManager::InsertNoteRaw(Note& note) {
     QSqlQuery Query;
 
-    // 1. УЗНАЕМ ХЭШ ПОСЛЕДНЕЙ ЗАПИСИ НА ДИСКЕ
-    std::string LastNoteHash = ""; // Если база пустая, у первой заметки будет ""
-
-    // Выбираем previous_hash, имя и зашифрованный текст последней добавленной строки
-    if (Query.exec("SELECT name, secured_text, previous_hash FROM notes ORDER BY id DESC LIMIT 1;") && Query.next()) {
-        std::string PrevName = Query.value(0).toString().toStdString();
-        std::string PrevText = Query.value(1).toString().toStdString();
-        std::string PrevRootHash = Query.value(2).toString().toStdString();
-
-        // Хэш текущей строки — это SHA-256 от суммы всех её данных
-        // Мы склеиваем имя, текст и её собственный previous_hash
-        std::string DataToHash = PrevName + PrevText + PrevRootHash;
-        LastNoteHash = CalculateSHA256(DataToHash);
-    }
-
-    // 2. Записываем этот хэш в наш C++ объект, чтобы он зафиксировался
-    note.PreviousHash = LastNoteHash;
-
-    // 3. Безопасно сохраняем всё в базу данных
     Query.prepare("INSERT INTO notes (name, secured_text, previous_hash) "
         "VALUES (:Name, :Text, :PrevHash);");
     Query.bindValue(":Name", QString::fromStdString(note.Name));
@@ -132,25 +114,51 @@ bool DatabaseManager::AddNote(Note& note) {
     Query.bindValue(":PrevHash", QString::fromStdString(note.PreviousHash));
 
     if (!Query.exec()) {
-        m_db.rollback();
+        qDebug() << "InsertNoteRaw error (notes):" << Query.lastError().text();
         return false;
     }
 
+    // Запоминаем сгенерированный БД идентификатор
     note.Id = Query.lastInsertId().toLongLong();
-    long long generatedId = note.Id;
-    // Записываем теги, используя полученный generatedId
     Query.prepare("INSERT INTO tags (note_id, tag_name) VALUES (:note_id, :tag_name);");
     for (const auto& tag : note.Tags) {
-        Query.bindValue(":note_id", generatedId);
-        Query.bindValue(":tag_name", QString::fromStdString(tag));
-
-        if (!Query.exec()) {
-            m_db.rollback();
-            return false;
-        }
+        Query.bindValue(":note_id", note.Id);
+            Query.bindValue(":tag_name", QString::fromStdString(tag));
+            if (!Query.exec()) {
+                qDebug() << "InsertNoteRaw error (tags):" << Query.lastError().text();
+                return false;
+            }
     }
 
-    return m_db.commit();
+    return true;
+}
+
+// 2. Высокоуровневый метод для добавления заметок пользователем вручную
+bool DatabaseManager::AddNote(Note& note) {
+    if (!beginTransaction()) return false;
+    // Узнаем хэш последней записи на диске
+    std::string LastNoteHash = "";
+    QSqlQuery Query;
+
+    if (Query.exec("SELECT name, secured_text, previous_hash FROM notes ORDER BY id DESC LIMIT 1;") && Query.next()) {
+        std::string PrevName = Query.value(0).toString().toStdString();
+        std::string PrevText = Query.value(1).toString().toStdString();
+        std::string PrevRootHash = Query.value(2).toString().toStdString();
+
+        std::string DataToHash = PrevName + PrevText + PrevRootHash;
+        LastNoteHash = CalculateSHA256(DataToHash);
+    }
+
+    // Записываем хэш в наш объект
+    note.PreviousHash = LastNoteHash;
+
+    // Просто вызываем наш низкоуровневый метод для фактической записи!
+    if (!InsertNoteRaw(note)) {
+        rollbackTransaction(); // Откатываемся в случае ошибки[cite: 5]
+        return false;
+    }
+
+    return commitTransaction(); // Фиксируем изменения[cite: 5]
 }
 bool DatabaseManager::HasCryptoKeys() {
     QSqlQuery Query;
@@ -334,4 +342,25 @@ std::string DatabaseManager::GetEncrypted2FASecret() {
         return query.value(0).toString().toStdString();
     }
     return "";
+}
+
+bool DatabaseManager::beginTransaction() {
+    if (m_db.isOpen()) {
+        return m_db.transaction();
+    }
+    return false;
+}
+
+bool DatabaseManager::commitTransaction() {
+    if (m_db.isOpen()) {
+        return m_db.commit();
+    }
+    return false;
+}
+
+bool DatabaseManager::rollbackTransaction() {
+    if (m_db.isOpen()) {
+        return m_db.rollback();
+    }
+    return false;
 }
