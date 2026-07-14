@@ -13,6 +13,7 @@ struct Note {
     std::string PreviousHash;         
     std::vector<std::string> Tags;   
 };
+SecureString QStringToSecureString(const QString& qtStr);
 
 std::string EncodeBase32(const unsigned char* data, size_t length);
 
@@ -33,8 +34,6 @@ SecureString GetRandonDEK();
 std::vector<unsigned char> DerivedKey(const SecureString& text, const std::vector<unsigned char>& salt);
 
 std::string GenerateRandomSalt();
-
-SecureString QStringToSecureString(const QString& qtStr);
 
 std::string StringToHex(const std::string input);
 

@@ -128,21 +128,7 @@ bool Verify2FACode(const SecureString& secret, int userCode) {
 	}
 	return false;
 }
-SecureString QStringToSecureString(const QString& qtStr) {
-	if (qtStr.isEmpty()) return SecureString();
 
-	// 1. Переводим QString в массив байт (обычно в кодировке UTF-8)
-	QByteArray bytes = qtStr.toUtf8();
-
-	// 2. Явно конструируем SecureString из сырого указателя на данные и их длины
-	SecureString secureStr(bytes.constData(), bytes.size());
-
-	// 3. ЗАЩИТА ПАМЯТИ: Принудительно затираем временный QByteArray нулями.
-	// Это гарантирует, что пароль/текст не останется в куче после уничтожения bytes.
-	std::fill(bytes.begin(), bytes.end(), 0);
-
-	return secureStr;
-}
 SecureString GetRandonDEK() {
 	unsigned char RawBytes[32];
 	if ((RAND_bytes(RawBytes, 32) != 1)) {
@@ -389,4 +375,20 @@ std::string MerkleRoot(const std::vector<Note>& UserNotes) {
 		Archieved = NewLevel;
 	}
 	return Archieved[0];
+}
+
+SecureString QStringToSecureString(const QString& qtStr) {
+	if (qtStr.isEmpty()) return SecureString();
+
+	// 1. Переводим QString в массив байт (обычно в кодировке UTF-8)
+	QByteArray bytes = qtStr.toUtf8();
+
+	// 2. Явно конструируем SecureString из сырого указателя на данные и их длины
+	SecureString secureStr(bytes.constData(), bytes.size());
+
+	// 3. ЗАЩИТА ПАМЯТИ: Принудительно затираем временный QByteArray нулями.
+	// Это гарантирует, что пароль/текст не останется в куче после уничтожения bytes.
+	std::fill(bytes.begin(), bytes.end(), 0);
+
+	return secureStr;
 }
