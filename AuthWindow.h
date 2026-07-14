@@ -21,12 +21,14 @@ public:
 private slots:
     void HandleBtnLogin();    
     void HandleBtnRegister();
+    void HandleBtnImportBackup();
 
 private:
     bool IsStorageExists() const;
     // Элементы интерфейса
     QLabel* m_StatusLabel;
     QLineEdit* m_PasswordInput;
+    QPushButton* m_BtnSettings;
     QPushButton* m_BtnLogin;
     QPushButton* m_BtnRegister;
 };

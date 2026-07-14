@@ -5,6 +5,7 @@
 #include "CryptoManager.h"   // Для функций шифрования, хеширования и PBKDF2
 #include "MainWindow.h"      // Чтобы создать и показать главное окно при успешном входе
 #include "TwoFactorDialog.h"
+#include "PasswordInput.h"
 // 2. Инклуды элементов интерфейса Qt
 #include <QLineEdit>
 #include <QPushButton>
@@ -13,6 +14,10 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
 #include <QProgressBar>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QMenu>
+#include <QStyle>
 #include <fstream>
 
 // 3. Менеджеры геометрии и окна сообщений
@@ -29,6 +34,20 @@ AuthWindow::AuthWindow(QWidget* parent)
     setFixedSize(350, 180);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    //верхнее часть окна с кнопкой импорта данных из бэкапа
+    m_BtnSettings = new QPushButton("⚙", this);
+    m_BtnSettings->setFixedSize(28, 28);
+
+    // Назначаем уникальный идентификатор для QSS
+    m_BtnSettings->setObjectName("btnImportBackup");
+
+    // Создаем выпадающее меню
+    QMenu* settingsMenu = new QMenu(this);
+    QAction* importAction = settingsMenu->addAction("Импортировать бэкап");
+
+    // Привязываем меню к кнопке
+    m_BtnSettings->setMenu(settingsMenu);
+
 
     m_StatusLabel = new QLabel(this);
 
@@ -62,6 +81,7 @@ AuthWindow::AuthWindow(QWidget* parent)
     // Коннекты слотов
     connect(m_BtnLogin, &QPushButton::clicked, this, &AuthWindow::HandleBtnLogin);
     connect(m_BtnRegister, &QPushButton::clicked, this, &AuthWindow::HandleBtnRegister);
+    connect(importAction, &QAction::triggered, this, &AuthWindow::HandleBtnImportBackup);
 }
 
 AuthWindow::~AuthWindow() {}
@@ -253,5 +273,158 @@ void AuthWindow::HandleBtnRegister() {
     }
     else {
         QMessageBox::warning(this, "Ошибка", "Не удалось инициализировать базу данных.");
+    }
+}
+
+void AuthWindow::HandleBtnImportBackup() {
+    // 1. Выбор файла бэкапа
+    QString InitialDir = QCoreApplication::applicationDirPath();
+    QString FileFilter = "Зашифрованные бэкапы (*.enc);;Все файлы (*.*)";
+    QString SelectedFile = QFileDialog::getOpenFileName(
+        this,
+        "Выберите файл бэкапа",
+        InitialDir,
+        FileFilter
+    );
+
+    if (SelectedFile.isEmpty()) {
+        return; // Пользователь отменил выбор файла
+    }
+
+    // 2. Ввод пароля (объявляем переменную ключа заранее, чтобы сохранить область видимости)
+    SecureString EnteredKey;
+    PasswordInput PasswordDialog(this);
+
+    // Вызываем exec() у созданного объекта диалога
+    if (PasswordDialog.exec() == QDialog::Accepted) {
+        EnteredKey = PasswordDialog.GetKey();
+    }
+    else {
+        return; // Пользователь нажал "Отмена" при вводе пароля
+    }
+
+    // 3. Создаем переменные для данных бэкапа и загружаем файл
+    std::vector<Note> Notes;
+    std::string Salt;
+    std::string EncryptedDEK;
+    std::string DEKHash;
+
+    FileManager BackUp(SelectedFile.toStdString()); // Приводим QString к std::string
+    if (!BackUp.LoadBackup(Notes, EncryptedDEK, Salt, DEKHash)) {
+        QMessageBox::critical(this, "Ошибка чтения", "Не удалось прочитать бэкап или формат файла поврежден.");
+        return;
+    }
+
+    // Переменные для транзакции и отката
+    bool backupInProgress = false;
+    QString dbPath = "SafeData.db";
+    QString backupOldDbPath = "SafeData.db.old";
+
+    try {
+        // 4. Криптографическая проверка пароля бэкапа
+        std::vector<unsigned char> SaltVector(Salt.begin(), Salt.end());
+        SecureString DecryptedDEK = DecryptAES(EncryptedDEK, EnteredKey, SaltVector);
+        std::string DekForHash(DecryptedDEK.data(), DecryptedDEK.length());
+
+        if (CalculateSHA256(DekForHash) != DEKHash) {
+            OPENSSL_cleanse(&DecryptedDEK[0], DecryptedDEK.length());
+            OPENSSL_cleanse(&DekForHash[0], DekForHash.length());
+            QMessageBox::critical(this, "Ошибка доступа", "Неверный пароль от бэкапа!");
+            return;
+        }
+        OPENSSL_cleanse(&DekForHash[0], DekForHash.length());
+
+        // 5. Работа с файловой системой и базой данных
+        DatabaseManager::instance().closeDatabase();
+
+        // Сигнализируем, что сейчас начнется опасная фаза перезаписи файлов БД
+        backupInProgress = true;
+
+        if (QFile::exists(backupOldDbPath)) {
+            QFile::remove(backupOldDbPath);
+        }
+
+        if (QFile::exists(dbPath)) {
+            if (!QFile::rename(dbPath, backupOldDbPath)) {
+                throw std::runtime_error("Не удалось переименовать старую базу.");
+            }
+        }
+
+        // Создаем новую базу
+        if (!DatabaseManager::instance().initDatabase(dbPath)) {
+            throw std::runtime_error("Не удалось инициализировать новую базу.");
+        }
+
+        // Сохраняем импортированные служебные ключи
+        if (!DatabaseManager::instance().SaveCryptoKeys(
+            QString::fromStdString(Salt),
+            QString::fromStdString(EncryptedDEK),
+            QString::fromStdString(DEKHash)))
+        {
+            throw std::runtime_error("Не удалось сохранить новые ключи шифрования.");
+        }
+
+        // 6. Импорт заметок с пересчетом цепочки хэшей
+        std::string expectedPreviousHash = "";
+        bool importSuccess = true;
+
+        DatabaseManager::instance().beginTransaction();
+
+        for (auto& note : Notes) {
+            note.PreviousHash = expectedPreviousHash;
+
+            if (!DatabaseManager::instance().InsertNoteRaw(note)) {
+                importSuccess = false;
+                break;
+            }
+
+            std::string DataToHash = note.Name + note.SecuredText + note.PreviousHash;
+            expectedPreviousHash = CalculateSHA256(DataToHash);
+        }
+
+        if (importSuccess) {
+            DatabaseManager::instance().commitTransaction();
+            QFile::remove(backupOldDbPath); // Все ок — удаляем старый бэкап БД
+
+            QMessageBox::information(this, "Успех",
+                "База данных успешно восстановлена из бэкапа!\nИспользуйте пароль бэкапа для входа.");
+
+            m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
+            m_BtnLogin->setEnabled(true);
+            m_BtnRegister->setEnabled(false);
+        }
+        else {
+            // Если запись упала — вызываем исключение, чтобы уйти в общий блок отката
+            throw std::runtime_error("Ошибка при импорте заметок.");
+        }
+
+        OPENSSL_cleanse(&DecryptedDEK[0], DecryptedDEK.length());
+    }
+    catch (...) {
+        QMessageBox::critical(this, "Критическая ошибка", "Произошла непредвиденная ошибка при восстановлении базы!");
+
+        // Надежный откат файлов на диске в исходное состояние
+        if (backupInProgress) {
+            DatabaseManager::instance().closeDatabase();
+            if (QFile::exists(dbPath)) {
+                QFile::remove(dbPath);
+            }
+            if (QFile::exists(backupOldDbPath)) {
+                QFile::rename(backupOldDbPath, dbPath);
+            }
+            DatabaseManager::instance().initDatabase(dbPath);
+        }
+
+        // Синхронизируем GUI с итоговым состоянием БД
+        if (IsStorageExists()) {
+            m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
+            m_BtnRegister->setEnabled(false);
+            m_BtnLogin->setEnabled(true);
+        }
+        else {
+            m_StatusLabel->setText("Сейф не найден. Придумайте мастер-пароль для инициализации:");
+            m_BtnLogin->setEnabled(false);
+            m_BtnRegister->setEnabled(true);
+        }
     }
 }
