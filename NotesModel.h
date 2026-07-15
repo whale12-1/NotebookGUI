@@ -4,7 +4,7 @@
 #include "CryptoManager.h" // Твоя структура Note
 #include <openssl/crypto.h>
 #include "DatabaseManager.h"
-
+#include <QFile>
 class NotesModel : public QAbstractListModel {
     Q_OBJECT
 
@@ -48,12 +48,19 @@ public:
     }
     bool RemoveNote(int row) {
         if (!m_Notes || row < 0 || row >= static_cast<int>(m_Notes->size())) return false;
-        long long noteId = (*m_Notes)[row].Id;
 
-        // 1. Удаляем из базы данных (там же происходит и каскадный пересчет хэшей на диске)
+        // Получаем ссылку на удаляемую заметку
+        const Note& noteToDelete = (*m_Notes)[row];
+        long long noteId = noteToDelete.Id;
+
+        // === НОВЫЙ БЛОК: Удаляем файлы вложений с диска ===
+        for (const auto& attach : noteToDelete.Attachments) {
+            QString fullPath = QString("./attachments/%1").arg(QString::fromStdString(attach.DiskFileName));
+            QFile::remove(fullPath); // Стираем файл насовсем
+        }
+
+        // 1. Удаляем из базы данных
         if (DatabaseManager::instance().RemoveNote(noteId)) {
-
-            // Уведомляем интерфейс об удалении строки, чтобы она исчезла с экрана
             beginRemoveRows(QModelIndex(), row, row);
             m_Notes->erase(m_Notes->begin() + row);
             endRemoveRows();
