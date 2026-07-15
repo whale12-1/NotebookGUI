@@ -64,6 +64,22 @@ bool DatabaseManager::initDatabase(const QString& dbName) {
         return false;
     }
 
+    QString CreateAttachmentsTable =
+        "CREATE TABLE IF NOT EXISTS attachments("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "note_id INTEGER NOT NULL,"
+        "original_name_encrypted TEXT NOT NULL, "
+        "disk_filename TEXT NOT NULL,"
+        "iv BLOB NOT NULL,"
+        "file_size INTEGER NOT NULL,"
+        "FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE"
+        ");";
+
+    if (!query.exec(CreateAttachmentsTable)) {
+        qDebug() << "Ошибка создания таблицы Attachments:" << query.lastError().text();
+        return false;
+    }
+
     return true;
 }
 
@@ -123,13 +139,30 @@ bool DatabaseManager::InsertNoteRaw(Note& note) {
     Query.prepare("INSERT INTO tags (note_id, tag_name) VALUES (:note_id, :tag_name);");
     for (const auto& tag : note.Tags) {
         Query.bindValue(":note_id", note.Id);
-            Query.bindValue(":tag_name", QString::fromStdString(tag));
-            if (!Query.exec()) {
-                qDebug() << "InsertNoteRaw error (tags):" << Query.lastError().text();
-                return false;
-            }
+        Query.bindValue(":tag_name", QString::fromStdString(tag));
+        if (!Query.exec()) {
+            qDebug() << "InsertNoteRaw error (tags):" << Query.lastError().text();
+            return false;
+        }
     }
+    Query.prepare("INSERT INTO attachments (note_id, original_name_encrypted, disk_filename, iv, file_size) "
+        "VALUES (:note_id, :orig_name, :disk_name, :iv, :file_size);");
+    for (const auto& attach : note.Attachments) {
+        Query.bindValue(":note_id", note.Id);
+        Query.bindValue(":orig_name", QString::fromStdString(attach.OriginalNameEncrypted));
+        Query.bindValue(":disk_name", QString::fromStdString(attach.DiskFileName));
 
+        // Преобразуем вектор байт IV в QByteArray для вставки в BLOB поле БД
+        QByteArray ivBytes(reinterpret_cast<const char*>(attach.Iv.data()), attach.Iv.size());
+        Query.bindValue(":iv", ivBytes);
+
+        Query.bindValue(":file_size", attach.FileSize);
+
+        if (!Query.exec()) {
+            qDebug() << "InsertNoteRaw error (attachments):" << Query.lastError().text();
+            return false;
+        }
+    }
     return true;
 }
 
@@ -299,6 +332,30 @@ std::vector<Note> DatabaseManager::getAllNotes() {
         if (idToVectorIndex.find(noteId) != idToVectorIndex.end()) {
             size_t vectorIdx = idToVectorIndex[noteId];
             notesList[vectorIdx].Tags.push_back(tagName);
+        }
+    }
+    // === ШАГ 3: Чтение вложений из БД ===
+    if (!query.exec("SELECT note_id, original_name_encrypted, disk_filename, iv, file_size FROM attachments;")) {
+        qDebug() << "Ошибка чтения вложений:" << query.lastError().text();
+        return notesList;
+    }
+
+    while (query.next()) {
+        qlonglong noteId = query.value(0).toLongLong();
+
+        AttachmentInfo attach;
+        attach.OriginalNameEncrypted = query.value(1).toString().toStdString();
+        attach.DiskFileName = query.value(2).toString().toStdString();
+
+        QByteArray ivData = query.value(3).toByteArray();
+        attach.Iv.assign(ivData.begin(), ivData.end());
+
+        attach.FileSize = query.value(4).toLongLong();
+
+        // Если заметка с таким ID существует в нашем векторе, добавляем вложение к ней
+        if (idToVectorIndex.find(noteId) != idToVectorIndex.end()) {
+            size_t vectorIdx = idToVectorIndex[noteId];
+            notesList[vectorIdx].Attachments.push_back(attach);
         }
     }
 
