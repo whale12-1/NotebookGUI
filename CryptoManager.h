@@ -5,13 +5,20 @@
 #include <QString>
 #include "json.hpp" 
 
+struct AttachmentInfo {
+    std::string OriginalNameEncrypted;    // Чтобы знать, как файл назывался
+    std::string DiskFileName;             // Чтобы найти его в папке attachments
+    std::vector<unsigned char> Iv;        // Чтобы расшифровать
+    long long FileSize = 0;               // Чтобы UI мгновенно показывал размер
+};
 
 struct Note {
     long long Id = 0;
-    std::string Name;                 
+    std::string Name;
     std::string SecuredText;          
     std::string PreviousHash;         
     std::vector<std::string> Tags;   
+    std::vector<AttachmentInfo> Attachments;
 };
 SecureString QStringToSecureString(const QString& qtStr);
 
@@ -61,3 +68,19 @@ inline void from_json(const nlohmann::json& j, Note& n) {
     j.at("secured_text").get_to(n.SecuredText);
     j.at("tags").get_to(n.Tags);
 }
+
+unsigned int EncryptFileStream(
+    const std::string& inputPath,
+    const std::string& outputPath,
+    const SecureString& key,
+    const std::vector<unsigned char>& salt,
+    const std::vector<unsigned char>& iv
+);
+
+bool DecryptFileStream(
+    const std::string& inputPath,
+    const std::string& outputPath,
+    const SecureString& key,
+    const std::vector<unsigned char>& salt,
+    const std::vector<unsigned char>& iv
+);

@@ -3,6 +3,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/crypto.h>
+#include <openssl/aes.h>
 #include <openssl/hmac.h>
 #include <stdexcept>
 #include <vector>
@@ -391,4 +392,126 @@ SecureString QStringToSecureString(const QString& qtStr) {
 	std::fill(bytes.begin(), bytes.end(), 0);
 
 	return secureStr;
+}
+
+//Функции шифровки-расшифровки файлов
+constexpr size_t BUFFER_SIZE = 65536;
+
+// Потоковое шифрование файла
+#include <QFile> // Обязательно добавляем для кроссплатформенной работы с файлами
+#include <fstream>
+
+// Потоковое шифрование файла через QFile
+unsigned int EncryptFileStream(const std::string& inputPath, const std::string& outputPath,
+	const SecureString& key, const std::vector<unsigned char>& salt, const std::vector<unsigned char>& iv) {
+
+	std::vector<unsigned char> aesKey;
+	try {
+		aesKey = DerivedKey(key, salt);
+	}
+	catch (...) {
+		return 0;
+	}
+
+	// Используем QFile вместо std::ifstream / std::ofstream
+	QFile inFile(QString::fromStdString(inputPath));
+	QFile outFile(QString::fromStdString(outputPath));
+
+	if (!inFile.open(QIODevice::ReadOnly) || !outFile.open(QIODevice::WriteOnly)) {
+		return 0; // Теперь QFile гарантированно откроет пути любой сложности и кодировки
+	}
+
+	std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(
+		EVP_CIPHER_CTX_new(),
+		EVP_CIPHER_CTX_free
+	);
+	if (!ctx) return 0;
+
+	if (1 != EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_cbc(), nullptr,
+		aesKey.data(),
+		iv.data())) {
+		return 0;
+	}
+
+	std::vector<char> inBuffer(BUFFER_SIZE);
+	std::vector<unsigned char> outBuffer(BUFFER_SIZE + 16); // Заменили макрос на 16
+
+	int outLen = 0;
+	unsigned int totalEncryptedSize = 0;
+
+	// Читаем через inFile.read()
+	while (!inFile.atEnd()) {
+		qint64 bytesRead = inFile.read(inBuffer.data(), BUFFER_SIZE);
+		if (bytesRead <= 0) break;
+
+		if (1 != EVP_EncryptUpdate(ctx.get(), outBuffer.data(), &outLen,
+			reinterpret_cast<const unsigned char*>(inBuffer.data()), bytesRead)) {
+			return 0;
+		}
+		outFile.write(reinterpret_cast<const char*>(outBuffer.data()), outLen);
+		totalEncryptedSize += outLen;
+	}
+
+	if (1 != EVP_EncryptFinal_ex(ctx.get(), outBuffer.data(), &outLen)) {
+		return 0;
+	}
+	outFile.write(reinterpret_cast<const char*>(outBuffer.data()), outLen);
+	totalEncryptedSize += outLen;
+
+	return totalEncryptedSize;
+}
+
+// Потоковое расшифрование файла через QFile
+bool DecryptFileStream(const std::string& inputPath, const std::string& outputPath,
+	const SecureString& key, const std::vector<unsigned char>& salt, const std::vector<unsigned char>& iv) {
+
+	std::vector<unsigned char> aesKey;
+	try {
+		aesKey = DerivedKey(key, salt);
+	}
+	catch (...) {
+		return false;
+	}
+
+	QFile inFile(QString::fromStdString(inputPath));
+	QFile outFile(QString::fromStdString(outputPath));
+
+	if (!inFile.open(QIODevice::ReadOnly) || !outFile.open(QIODevice::WriteOnly)) {
+		return false;
+	}
+
+	std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(
+		EVP_CIPHER_CTX_new(),
+		EVP_CIPHER_CTX_free
+	);
+	if (!ctx) return false;
+
+	if (1 != EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_cbc(), nullptr,
+		aesKey.data(),
+		iv.data())) {
+		return false;
+	}
+
+	std::vector<char> inBuffer(BUFFER_SIZE);
+	std::vector<unsigned char> outBuffer(BUFFER_SIZE + 16); // Заменили макрос на 16
+
+	int outLen = 0;
+
+	while (!inFile.atEnd()) {
+		qint64 bytesRead = inFile.read(inBuffer.data(), BUFFER_SIZE);
+		if (bytesRead <= 0) break;
+
+		if (1 != EVP_DecryptUpdate(ctx.get(), outBuffer.data(), &outLen,
+			reinterpret_cast<const unsigned char*>(inBuffer.data()), bytesRead)) {
+			return false;
+		}
+		outFile.write(reinterpret_cast<const char*>(outBuffer.data()), outLen);
+	}
+
+	if (1 != EVP_DecryptFinal_ex(ctx.get(), outBuffer.data(), &outLen)) {
+		return false;
+	}
+	outFile.write(reinterpret_cast<const char*>(outBuffer.data()), outLen);
+
+	return true;
 }
