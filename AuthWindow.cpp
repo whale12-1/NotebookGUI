@@ -31,25 +31,35 @@ AuthWindow::AuthWindow(QWidget* parent)
     : QWidget(parent)
 {
     setWindowTitle("Авторизация в Сейфе");
-    setFixedSize(350, 180);
+    // Увеличили высоту со 180 до 200, чтобы элементам было свободно
+    setFixedSize(400, 290);
 
+    // Главный вертикальный менеджер компоновки
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    //верхнее часть окна с кнопкой импорта данных из бэкапа
-    m_BtnSettings = new QPushButton("⚙", this);
-    m_BtnSettings->setFixedSize(28, 28);
+    mainLayout->setContentsMargins(16, 12, 16, 16); // Делаем аккуратные отступы от краев
+    mainLayout->setSpacing(10);
 
-    // Назначаем уникальный идентификатор для QSS
-    m_BtnSettings->setObjectName("btnImportBackup");
+    // --- ВЕРХНЯЯ ПАНЕЛЬ С КНОПКОЙ НАСТРОЕК (TOP BAR) ---
+    QHBoxLayout* topBarLayout = new QHBoxLayout();
+    topBarLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_BtnSettings = new QPushButton("⚙", this);
+    m_BtnSettings->setFixedSize(28, 28); // Задаем фиксированный размер
+    m_BtnSettings->setObjectName("Settings2FABtn"); // Привязываем к стилю шестеренки из QSS
 
     // Создаем выпадающее меню
     QMenu* settingsMenu = new QMenu(this);
     QAction* importAction = settingsMenu->addAction("Импортировать бэкап");
-
-    // Привязываем меню к кнопке
     m_BtnSettings->setMenu(settingsMenu);
 
+    // Добавляем кнопку в горизонтальный лайаут и ставим пружину (Spacer) справа.
+    // Это сдвинет кнопку влево и не даст ей растягиваться.
+    topBarLayout->addWidget(m_BtnSettings);
+    topBarLayout->addStretch();
+    // ----------------------------------------------------
 
     m_StatusLabel = new QLabel(this);
+    m_StatusLabel->setWordWrap(true); // Разрешаем перенос длинного текста на новую строку
 
     m_PasswordInput = new QLineEdit(this);
     m_PasswordInput->setEchoMode(QLineEdit::Password); // Скрываем ввод мастер-пароля
@@ -64,9 +74,11 @@ AuthWindow::AuthWindow(QWidget* parent)
     btnLayout->addWidget(m_BtnLogin);
     btnLayout->addWidget(m_BtnRegister);
 
-    mainLayout->addWidget(m_StatusLabel);
-    mainLayout->addWidget(m_PasswordInput);
-    mainLayout->addLayout(btnLayout);
+    // Собираем интерфейс строго по порядку сверху вниз:
+    mainLayout->addLayout(topBarLayout); // 1. Верхний бар с кнопкой
+    mainLayout->addWidget(m_StatusLabel); // 2. Описание статуса
+    mainLayout->addWidget(m_PasswordInput); // 3. Поле ввода пароля
+    mainLayout->addLayout(btnLayout);     // 4. Кнопки действия
 
     // Логика переключения режимов при старте
     if (IsStorageExists()) {
@@ -132,7 +144,6 @@ void AuthWindow::HandleBtnLogin() {
         OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
         if (DatabaseManager::instance().Is2FAEnabled()) {
             TwoFactorAuthDialog Dialog(this);
-            Dialog.setStyleSheet(this->styleSheet());
             if (Dialog.exec() == QDialog::Accepted) {
                 int EnteredCode = Dialog.GetEnteredCode();
                 try {
