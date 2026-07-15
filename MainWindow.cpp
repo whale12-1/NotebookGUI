@@ -13,7 +13,10 @@
 #include <QTimer>
 #include <QClipboard>
 #include <QApplication>
-
+#include <QUuid>      // Для генерации случайных уникальных имен файлов
+#include <QDir>       // Для создания папки под вложения
+#include <QFileDialog>// Для выбора папки сохранения расшифрованного файла
+#include <openssl/rand.h>
 // Виджеты для отображения текста и всплывающих окон
 #include <QLabel>        
 #include <QMessageBox>   
@@ -44,16 +47,6 @@ bool MainWindow::event(QEvent* event) {
 MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("data.txt") {
     setWindowTitle("Твой Сейф Заметок (Завершено)");
     resize(800, 600);
-    QFile styleFile(":/Style.qss");
-    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
-        QTextStream ts(&styleFile);
-        QString styleSheet = ts.readAll();
-
-        // Применяем стили глобально ко всему окну и его дочерним элементам
-        this->setStyleSheet(styleSheet);
-
-        styleFile.close();
-    }
     // 1. Создаем специальный центральный виджет-контейнер
     QWidget* centralWidget = new QWidget(this);
     setCentralWidget(centralWidget); // Устанавливаем его главным в QMainWindow
@@ -237,40 +230,75 @@ void MainWindow::HandleInactivityLockOut() {
     this->close();
 }
 void MainWindow::HandleAddNote() {
-    // 1. Открываем твой диалог создания заметки
     CreateNoteDialog Dialog(this);
     if (Dialog.exec() == QDialog::Accepted) {
-        // 2. Собираем данные из полей диалога
         std::string NoteName = Dialog.GetName();
         SecureString RawText = Dialog.GetText();
         std::vector<std::string> NoteTags = Dialog.GetTags();
+
+        // ИСПРАВЛЕНО: Вызываем правильный метод GetAllAttachments()
+        std::map<std::string, std::string> Attachments = Dialog.GetAllAttachments();
+
         SecureString Key = Dialog.IsAutoEncryptChecked() ? m_DecryptedDEK->data() : Dialog.GetCustomKey();
         std::vector<unsigned char> RandomSaltVector(m_RandomSalt.begin(), m_RandomSalt.end());
+
         std::string EncryptedText;
         try {
-            EncryptedText = EncryptAES(RawText,Key,RandomSaltVector);
+            EncryptedText = EncryptAES(RawText, Key, RandomSaltVector);
         }
-        catch(...){
+        catch (...) {
             QMessageBox::critical(this, "Ошибка", "Не удалось зашифровать заметку.");
             return;
         }
-        // 4. Создаем объект структуры в новом стиле
+
         Note NewNote;
         NewNote.Name = NoteName;
         NewNote.SecuredText = EncryptedText;
         NewNote.Tags = NoteTags;
 
-        // 5. Просто отдаем заметку в модель! 
-        // Модель сама вызовет DatabaseManager, сохранит всё в SQLite и нарисует на экране.
+        for (const auto& it : Attachments) {
+            try {
+                SecureString Name(it.first.begin(), it.first.end());
+
+                // ИСПРАВЛЕНО: Используем std::vector вместо сырого массива для OpenSSL и структуры
+                std::vector<unsigned char> ivVec(16);
+                if (!(RAND_bytes(ivVec.data(), 16) == 1)) {
+                    throw std::runtime_error("Не удалось сгенерировать вспомогательный вектор iv");
+                }
+
+                std::string EncryptedName = EncryptAES(Name, Key, RandomSaltVector);
+                QString DiskName = QUuid::createUuid().toString(QUuid::WithoutBraces) + ".dat";
+
+                QDir().mkpath("./attachments");
+                QString destPath = "./attachments/" + DiskName;
+
+                // ИСПРАВЛЕНО: Исправлено имя функции, передан Key и корректный тип ivVec
+                unsigned int FileSize = EncryptFileStream(it.second, destPath.toStdString(), Key, RandomSaltVector, ivVec);
+                if (FileSize == 0) {
+                    QMessageBox::warning(this, "Ошибка", "Ошибка при записи файла вложения.");
+                    return;
+                }
+
+                // ИСПРАВЛЕНО: В DiskFileName кладем только DiskName.toStdString() (без папки)
+                // Передаем ivVec, соответствующий типу структуры
+                NewNote.Attachments.push_back({ EncryptedName, DiskName.toStdString(), ivVec, FileSize });
+            }
+            catch (...) {
+                QMessageBox::critical(this, "Ошибка", "Критический сбой при обработке вложения.");
+                return;
+            }
+        }
+
         if (m_NotesModel->AddNote(NewNote)) {
             QMessageBox::information(this, "Успех", "Заметка сохранена в базу!");
-            UpdateTagsPanel(); // Обновляем пастельные кнопочки тегов на панели
+            UpdateTagsPanel();
         }
         else {
             QMessageBox::critical(this, "Ошибка", "Не удалось сохранить заметку в базу данных.");
         }
     }
 }
+
 void MainWindow::HandleDeleteNote() {
     // 1. Получаем индекс строки, на которую кликнули в интерфейсе
     QModelIndex SelectedIndex = m_NotesView->currentIndex();
@@ -307,7 +335,6 @@ void MainWindow::HandleDecryptNote() {
         return;
     }
     QModelIndex sourceIndex = m_ProxyModel->mapToSource(currentIndex);
-
     int currentRow = sourceIndex.row();
 
     DecryptNoteDialog Dialog(this);
@@ -316,25 +343,76 @@ void MainWindow::HandleDecryptNote() {
         std::vector<unsigned char> RandomSaltVector(m_RandomSalt.begin(), m_RandomSalt.end());
         try {
             SecureString decryptedText = DecryptAES(m_UserNotes[currentRow].SecuredText, DecryptingKey, RandomSaltVector);
+
             QDialog* viewDialog = new QDialog(this);
             viewDialog->setObjectName("DecryptViewDialog");
             viewDialog->setWindowTitle(QString::fromStdString(m_UserNotes[currentRow].Name));
-            viewDialog->setMinimumSize(450, 400);
+            viewDialog->setMinimumSize(450, 480); // Увеличили высоту под плашки файлов
 
             QVBoxLayout* layout = new QVBoxLayout(viewDialog);
 
             QTextEdit* viewer = new QTextEdit(viewDialog);
-            viewer->setObjectName("DecryptViewer"); // Привязываем стиль из QSS
+            viewer->setObjectName("DecryptViewer");
             viewer->setReadOnly(true);
-            // Передаем расшифрованную строку в метод setMarkdown!
             viewer->setMarkdown(QString::fromLocal8Bit(decryptedText.c_str()));
+            layout->addWidget(viewer);
+
+            // === НОВЫЙ БЛОК: Отображение и дешифрование вложений ===
+            const Note& currentNote = m_UserNotes[currentRow];
+            if (!currentNote.Attachments.empty()) {
+                QLabel* attachLabel = new QLabel("📎 Доступные вложения (нажмите для сохранения):", viewDialog);
+                attachLabel->setStyleSheet("font-weight: bold; margin-top: 10px;");
+                layout->addWidget(attachLabel);
+
+                QHBoxLayout* attachLayout = new QHBoxLayout();
+
+                for (const auto& attach : currentNote.Attachments) {
+                    // 1. Расшифровываем оригинальное имя файла
+                    std::string decryptedFileNameStr;
+                    try {
+                        decryptedFileNameStr = DecryptAES(attach.OriginalNameEncrypted, DecryptingKey, RandomSaltVector);
+                    }
+                    catch (...) {
+                        decryptedFileNameStr = "unknown_file";
+                    }
+                    QString decryptedFileName = QString::fromStdString(decryptedFileNameStr);
+
+                    // Создаем кнопку-плашку файла
+                    QPushButton* fileBtn = new QPushButton(QString("💾 %1").arg(decryptedFileName), viewDialog);
+                    fileBtn->setStyleSheet("padding: 5px 10px; background-color: #2e303f; border-radius: 4px; color: #ffffff;");
+
+                    // При клике -> Расшифровываем файл и сохраняем его через диалог
+                    connect(fileBtn, &QPushButton::clicked, this, [this, attach, decryptedFileName, DecryptingKey, RandomSaltVector]() {
+                        QString savePath = QFileDialog::getSaveFileName(this, "Сохранить файл как...", decryptedFileName);
+                        if (!savePath.isEmpty()) {
+                            QString encryptedFilePath = QString("./attachments/%1").arg(QString::fromStdString(attach.DiskFileName));
+
+                            try {
+                                // Потоком расшифровываем файл напрямую на диск
+                                if (DecryptFileStream(encryptedFilePath.toStdString(), savePath.toStdString(), DecryptingKey, RandomSaltVector, attach.Iv)) {
+                                    QMessageBox::information(this, "Успех", "Файл успешно сохранен!");
+                                }
+                                else {
+                                    QMessageBox::critical(this, "Ошибка", "Не удалось расшифровать файл или записать на диск.");
+                                }
+                            }
+                            catch (const std::exception& e) {
+                                QMessageBox::critical(this, "Ошибка", QString("Ошибка дешифрования: %1").arg(e.what()));
+                            }
+                        }
+                        });
+
+                    attachLayout->addWidget(fileBtn);
+                }
+                attachLayout->addStretch();
+                layout->addLayout(attachLayout);
+            }
 
             QPushButton* closeBtn = new QPushButton("Закрыть", viewDialog);
             closeBtn->setObjectName("DecryptCloseBtn");
             connect(closeBtn, &QPushButton::clicked, viewDialog, &QDialog::accept);
-
-            layout->addWidget(viewer);
             layout->addWidget(closeBtn);
+
             viewDialog->setStyleSheet(this->styleSheet());
             viewDialog->exec();
             delete viewDialog;
@@ -343,7 +421,6 @@ void MainWindow::HandleDecryptNote() {
             QMessageBox::critical(this, "Ошибка", "Неверный ключ шифрования или данные повреждены!");
         }
     }
-
 }
 
 void MainWindow::HandleChangeMasterPassword() {
