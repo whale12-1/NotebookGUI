@@ -3,6 +3,8 @@
 #include "PasswordInput.h"
 #include "FileManager.h"
 #include "TwoFactorDialog.h"
+#include "WinThemeUtils.h" // Добавлено для Mica
+#include "ModernMessage.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTabWidget>
@@ -16,20 +18,43 @@
 SettingsDialog::SettingsDialog(const std::vector<Note>& UserNotes, const SecureString& decryptedDEK, const std::string& randomSalt, QWidget* parent)
     : QDialog(parent), m_DecryptedDEK(decryptedDEK), m_RandomSalt(randomSalt), m_UserNotes(UserNotes)
 {
+    setObjectName("SettingsDialog");
+
+    // Настройка прозрачности и Mica-эффекта
+    setAttribute(Qt::WA_TranslucentBackground, true);
+    setWindowFlags(Qt::Window | Qt::WindowCloseButtonHint | Qt::CustomizeWindowHint);
+    WinThemeUtils::ApplyModernBlur(this);
+
     setWindowTitle("Настройки Сейфа");
-    setFixedSize(400, 300);
+    setFixedSize(450, 350); // Чуть увеличили для комфортного размещения
     SetupUI();
 }
 
 SettingsDialog::~SettingsDialog() {}
 
 void SettingsDialog::SetupUI() {
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    m_TabWidget = new QTabWidget(this);
+    // 1. Базовый ROOT слой без отступов
+    QVBoxLayout* rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+
+    // 2. Единая подложка-канвас
+    QWidget* mainCanvas = new QWidget(this);
+    mainCanvas->setObjectName("MainCanvas");
+    rootLayout->addWidget(mainCanvas);
+
+    // 3. Вертикальный контейнер на канвасе
+    QVBoxLayout* mainLayout = new QVBoxLayout(mainCanvas);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(12);
+
+    m_TabWidget = new QTabWidget(mainCanvas);
+    m_TabWidget->setObjectName("SettingsTabWidget");
 
     // --- ВКЛАДКА 1: БЭКАПЫ ---
     QWidget* backupTab = new QWidget();
+    backupTab->setAttribute(Qt::WA_TranslucentBackground, true); // Прозрачность вкладки
     QVBoxLayout* backupLayout = new QVBoxLayout(backupTab);
+    backupLayout->setContentsMargins(15, 15, 15, 15);
 
     QLabel* backupInfo = new QLabel(
         "Резервная копия содержит ваши зашифрованные заметки.\n"
@@ -39,23 +64,23 @@ void SettingsDialog::SetupUI() {
     backupInfo->setWordWrap(true);
 
     m_BtnCreateBackup = new QPushButton("Создать резервную копию", backupTab);
-    m_BtnCreateBackup->setObjectName("btnCreateBackup"); // Для QSS
+    m_BtnCreateBackup->setObjectName("btnCreateBackup");
 
     backupLayout->addWidget(backupInfo);
     backupLayout->addStretch();
     backupLayout->addWidget(m_BtnCreateBackup);
-    backupLayout->addSpacing(10);
 
     // --- ВКЛАДКА 2: БЕЗОПАСНОСТЬ (2FA) ---
     QWidget* securityTab = new QWidget();
+    securityTab->setAttribute(Qt::WA_TranslucentBackground, true); // Прозрачность вкладки
     QVBoxLayout* securityLayout = new QVBoxLayout(securityTab);
+    securityLayout->setContentsMargins(15, 15, 15, 15);
 
     m_ChbEnable2FA = new QCheckBox("Включить двухфакторную аутентификацию (2FA)", securityTab);
     m_Lbl2FAStatus = new QLabel(securityTab);
 
-    // Проверяем текущий статус 2FA в базе
     bool is2FAActive = DatabaseManager::instance().Is2FAEnabled();
-        m_ChbEnable2FA->setChecked(is2FAActive);
+    m_ChbEnable2FA->setChecked(is2FAActive);
     m_Lbl2FAStatus->setText(is2FAActive ? "Статус: Подключено" : "Статус: Отключено");
 
     securityLayout->addWidget(m_ChbEnable2FA);
@@ -69,7 +94,8 @@ void SettingsDialog::SetupUI() {
     mainLayout->addWidget(m_TabWidget);
 
     // Кнопка закрытия окна настроек
-    QPushButton* btnClose = new QPushButton("Закрыть", this);
+    QPushButton* btnClose = new QPushButton("Закрыть", mainCanvas);
+    btnClose->setObjectName("SettingsCloseBtn");
     mainLayout->addWidget(btnClose);
 
     // Коннекты сигналов
@@ -110,10 +136,10 @@ void SettingsDialog::HandleCreateBackup() {
             QMessageBox::critical(this, "Ошибка записи", "Не удалось сохранить бэкап или формат файла поврежден.");
             return;
         }
-        QMessageBox::information(this, "Бэкап", "Резервная копия успешно создана!");
+        ModernMessageBox::showInfo(this, "Бэкап", "Резервная копия успешно создана!");
     }
     catch (const std::exception& e) {
-        QMessageBox::critical(this, "Критическая ошибка", QString("Ошибка при шифровании бэкапа: %1").arg(e.what()));
+        ModernMessageBox::showCritical(this, "Критическая ошибка", QString("Ошибка при шифровании бэкапа: %1").arg(e.what()));
     }
 }
 
@@ -122,30 +148,58 @@ void SettingsDialog::HandleToggle2FA(bool enabled) {
         SecureString rawSecret;
         std::string displaySecret = Generate2FASecret(rawSecret);
 
+        // --- СОЗДАНИЕ И НАСТРОЙКА ДИАЛОГА В НОВОМ СТИЛЕ ---
         QDialog codeShowDialog(this);
+        codeShowDialog.setObjectName("TwoFactorSetupDialog");
+        codeShowDialog.setAttribute(Qt::WA_TranslucentBackground, true); // Прозрачность[cite: 11]
+        codeShowDialog.setWindowFlags(Qt::Window | Qt::WindowCloseButtonHint | Qt::CustomizeWindowHint); 
+        WinThemeUtils::ApplyModernBlur(&codeShowDialog); // Размытие Mica
+
         codeShowDialog.setWindowTitle("Настройка Google Authenticator");
-        codeShowDialog.setFixedSize(380, 260);
+        codeShowDialog.setFixedSize(400, 310); // Немного увеличили высоту под canvas-контейнер
         codeShowDialog.setStyleSheet(this->styleSheet());
 
-        QVBoxLayout* cLayout = new QVBoxLayout(&codeShowDialog);
-        QLabel* info = new QLabel("1. Добавьте этот секретный код в ваше мобильное приложение:\n", &codeShowDialog);
+        // 1. Корневой Layout без отступов[cite: 12, 15, 16]
+        QVBoxLayout* rootLayout = new QVBoxLayout(&codeShowDialog);
+        rootLayout->setContentsMargins(0, 0, 0, 0);
+
+        // 2. Единая подложка-канвас для стилизации[cite: 12, 15, 16]
+        QWidget* mainCanvas = new QWidget(&codeShowDialog);
+        mainCanvas->setObjectName("MainCanvas"); 
+        rootLayout->addWidget(mainCanvas); 
+
+        // 3. Внутренний контейнер на канвасе[cite: 12, 15, 16]
+        QVBoxLayout* cLayout = new QVBoxLayout(mainCanvas);
+        cLayout->setContentsMargins(20, 20, 20, 20); 
+        cLayout->setSpacing(10);
+
+        QLabel* info = new QLabel("1. Добавьте этот секретный код в ваше мобильное приложение:\n", mainCanvas);
         info->setWordWrap(true);
 
-        QLineEdit* keyField = new QLineEdit(QString::fromStdString(displaySecret), &codeShowDialog);
+        QLineEdit* keyField = new QLineEdit(QString::fromStdString(displaySecret), mainCanvas);
         keyField->setReadOnly(true);
         keyField->setAlignment(Qt::AlignCenter);
-        keyField->setStyleSheet("font-size: 18px; font-weight: bold; letter-spacing: 2px; color: #409eff; background: #f4f4f5; border: 1px dashed #409eff; padding: 5px;");
 
-        QLabel* info2 = new QLabel("\n2. Введите 6-значный код из телефона для подтверждения:", &codeShowDialog);
+        // Убираем непрозрачный фон для QLineEdit на прозрачной форме
+        QPalette keyPal = keyField->palette();
+        keyPal.setColor(QPalette::Base, Qt::transparent);
+        keyField->setPalette(keyPal);
+        keyField->setStyleSheet("font-size: 18px; font-weight: bold; letter-spacing: 2px; color: #7289da; border: 1px dashed rgba(114, 137, 218, 0.4); padding: 5px;");
 
-        QLineEdit* confirmField = new QLineEdit(&codeShowDialog);
+        QLabel* info2 = new QLabel("\n2. Введите 6-значный код из телефона для подтверждения:", mainCanvas);
+
+        QLineEdit* confirmField = new QLineEdit(mainCanvas);
         confirmField->setMaxLength(6);
         confirmField->setAlignment(Qt::AlignCenter);
         confirmField->setPlaceholderText("000 000");
-        confirmField->setStyleSheet("font-size: 16px; padding: 5px;");
+        confirmField->setObjectName("2FACodeField");
 
-        QPushButton* saveBtn = new QPushButton("Подтвердить и сохранить", &codeShowDialog);
-        saveBtn->setStyleSheet("background-color: #67c23a; color: white; font-weight: bold; padding: 8px; border-radius: 6px;");
+        QPalette confirmPal = confirmField->palette();
+        confirmPal.setColor(QPalette::Base, Qt::transparent);
+        confirmField->setPalette(confirmPal);
+
+        QPushButton* saveBtn = new QPushButton("Подтвердить и сохранить", mainCanvas);
+        saveBtn->setStyleSheet("background-color: rgba(103, 194, 58, 0.15); border: 1px solid rgba(103, 194, 58, 0.25); color: #67c23a; font-weight: bold; padding: 8px;");
 
         cLayout->addWidget(info);
         cLayout->addWidget(keyField);
@@ -162,13 +216,14 @@ void SettingsDialog::HandleToggle2FA(bool enabled) {
                 std::string encryptedSecret = EncryptAES(rawSecret, m_DecryptedDEK, saltVector);
 
                 if (DatabaseManager::instance().Enable2FA(encryptedSecret)) {
-                    QMessageBox::information(&codeShowDialog, "Успех", "2FA успешно активирована!");
+                    // Замена QMessageBox на кастомный ModernMessage
+                    ModernMessageBox::showInfo(&codeShowDialog, "Успех", "2FA успешно активирована!");
                     isConfirmed = true;
                     codeShowDialog.accept();
                 }
             }
             else {
-                QMessageBox::critical(&codeShowDialog, "Ошибка", "Неверный код! Попробуйте еще раз.");
+                ModernMessageBox::showCritical(&codeShowDialog, "Ошибка", "Неверный код! Попробуйте еще раз.");
             }
             });
 
@@ -178,7 +233,7 @@ void SettingsDialog::HandleToggle2FA(bool enabled) {
             m_Lbl2FAStatus->setText("Статус: Подключено");
         }
         else {
-            // Если пользователь закрыл окно или не подтвердил код, откатываем состояние чекбокса назад без вызова триггеров
+            // Если пользователь закрыл окно или не подтвердил код, откатываем состояние чекбокса
             m_ChbEnable2FA->blockSignals(true);
             m_ChbEnable2FA->setChecked(false);
             m_ChbEnable2FA->blockSignals(false);
@@ -186,14 +241,12 @@ void SettingsDialog::HandleToggle2FA(bool enabled) {
         }
     }
     else {
-        QMessageBox::StandardButton reply = QMessageBox::question(
-            this, "Отключение 2FA", "Вы уверены, что хотите отключить двухфакторную аутентификацию?",
-            QMessageBox::Yes | QMessageBox::No
-        );
+        // Использование кастомного окна диалога "Да/Нет"
+        bool reply = ModernMessageBox::showQuestion(this, "Отключение 2FA", "Вы уверены, что хотите отключить двухфакторную аутентификацию?");
 
-        if (reply == QMessageBox::Yes) {
+        if (reply) {
             if (DatabaseManager::instance().Disable2FA()) {
-                QMessageBox::information(this, "Успех", "Двухфакторная аутентификация отключена.");
+                ModernMessageBox::showInfo(this, "Успех", "Двухфакторная аутентификация отключена.");
                 m_Lbl2FAStatus->setText("Статус: Отключено");
             }
         }

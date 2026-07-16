@@ -56,6 +56,9 @@ add_executable(NoteBookGUI
     PasswordInput.cpp  
     SettingsDialog.h
     SettingsDialog.cpp
+    WinThemeUtils.h
+    WinThemeUtils.cpp
+    ModernMessage.h
 )
 
 # Линкуем Qt6
@@ -65,6 +68,9 @@ target_link_libraries(NoteBookGUI PRIVATE
     OpenSSL::SSL 
     OpenSSL::Crypto
 )
+if(WIN32)
+    target_link_libraries(NoteBookGUI PRIVATE dwmapi)
+endif()
 # Линкуем автоматически найденный OpenSSL
 if(OpenSSL_FOUND)
     # Нам нужен только Crypto-модуль для AES

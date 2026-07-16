@@ -1,5 +1,6 @@
 ﻿#include "AuthWindow.h"
-
+#include "WinThemeUtils.h"
+#include "ModernMessage.h"
 // 1. Инклуды твоих собственных модулей проекта
 #include "FileManager.h"    // Для проверки файла и загрузки сессии
 #include "CryptoManager.h"   // Для функций шифрования, хеширования и PBKDF2
@@ -18,6 +19,9 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QStyle>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QStyleOption>
 #include <fstream>
 
 // 3. Менеджеры геометрии и окна сообщений
@@ -31,66 +35,82 @@ AuthWindow::AuthWindow(QWidget* parent)
     : QWidget(parent)
 {
     setWindowTitle("Авторизация в Сейфе");
-    // Увеличили высоту со 180 до 200, чтобы элементам было свободно
-    setFixedSize(400, 290);
+    setObjectName("AuthWindowInstance");
+    setFixedSize(380, 270);
 
-    // Главный вертикальный менеджер компоновки
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(16, 12, 16, 16); // Делаем аккуратные отступы от краев
-    mainLayout->setSpacing(10);
+    // --- ИСПРАВЛЕНО: Включаем прозрачность, чтобы Mica просвечивал ---
+    this->setAttribute(Qt::WA_TranslucentBackground, true);
+    this->setWindowFlags(Qt::Window | Qt::WindowCloseButtonHint | Qt::WindowMinimizeButtonHint);
+
+    // Применяем размытие Windows
+    WinThemeUtils::ApplyModernBlur(this);
+
+    QVBoxLayout* rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+
+    // Наша карточка-подложка
+    QWidget* mainCanvas = new QWidget(this);
+    mainCanvas->setObjectName("MainCanvas");
+    // Разрешаем QSS красить этот виджет поверх прозрачности
+    mainCanvas->setAttribute(Qt::WA_StyledBackground, true);
+
+    rootLayout->addWidget(mainCanvas);
+    // Внутренний лайаут для элементов авторизации
+    QVBoxLayout* mainLayout = new QVBoxLayout(mainCanvas);
+    mainLayout->setContentsMargins(20, 16, 20, 20);
+    mainLayout->setSpacing(12);
 
     // --- ВЕРХНЯЯ ПАНЕЛЬ С КНОПКОЙ НАСТРОЕК (TOP BAR) ---
     QHBoxLayout* topBarLayout = new QHBoxLayout();
     topBarLayout->setContentsMargins(0, 0, 0, 0);
 
-    m_BtnSettings = new QPushButton("⚙", this);
-    m_BtnSettings->setFixedSize(28, 28); // Задаем фиксированный размер
-    m_BtnSettings->setObjectName("Settings2FABtn"); // Привязываем к стилю шестеренки из QSS
+    m_BtnSettings = new QPushButton("⚙", mainCanvas); // вешаем на mainCanvas
+    m_BtnSettings->setFixedSize(28, 28);
 
-    // Создаем выпадающее меню
     QMenu* settingsMenu = new QMenu(this);
     QAction* importAction = settingsMenu->addAction("Импортировать бэкап");
+
+    // Имя для стилизации кнопки
+    m_BtnSettings->setObjectName("AuthSettingsButton");
+    // Меню открывается сразу по клику на кнопку, без задержек
     m_BtnSettings->setMenu(settingsMenu);
 
-    // Добавляем кнопку в горизонтальный лайаут и ставим пружину (Spacer) справа.
-    // Это сдвинет кнопку влево и не даст ей растягиваться.
     topBarLayout->addWidget(m_BtnSettings);
     topBarLayout->addStretch();
-    // ----------------------------------------------------
 
-    m_StatusLabel = new QLabel(this);
-    m_StatusLabel->setWordWrap(true); // Разрешаем перенос длинного текста на новую строку
+    // --- ЭЛЕМЕНТЫ ФОРМЫ ---
+    m_StatusLabel = new QLabel(mainCanvas); // вешаем на mainCanvas
+    m_StatusLabel->setWordWrap(true);
 
-    m_PasswordInput = new QLineEdit(this);
-    m_PasswordInput->setEchoMode(QLineEdit::Password); // Скрываем ввод мастер-пароля
+    m_PasswordInput = new QLineEdit(mainCanvas); // вешаем на mainCanvas
+    m_PasswordInput->setEchoMode(QLineEdit::Password);
     m_PasswordInput->setPlaceholderText("Введите мастер-пароль");
 
     QHBoxLayout* btnLayout = new QHBoxLayout();
-    m_BtnLogin = new QPushButton("Войти", this);
-    m_BtnRegister = new QPushButton("Создать сейф", this);
+    m_BtnLogin = new QPushButton("Войти", mainCanvas); // вешаем на mainCanvas
+    m_BtnRegister = new QPushButton("Создать сейф", mainCanvas); // вешаем на mainCanvas
 
-    m_BtnLogin->setDefault(true); // Кнопка "Войти" сработает по нажатию Enter
+    m_BtnLogin->setDefault(true);
 
     btnLayout->addWidget(m_BtnLogin);
     btnLayout->addWidget(m_BtnRegister);
 
-    // Собираем интерфейс строго по порядку сверху вниз:
-    mainLayout->addLayout(topBarLayout); // 1. Верхний бар с кнопкой
-    mainLayout->addWidget(m_StatusLabel); // 2. Описание статуса
-    mainLayout->addWidget(m_PasswordInput); // 3. Поле ввода пароля
-    mainLayout->addLayout(btnLayout);     // 4. Кнопки действия
+    // Собираем все в кучу внутри mainCanvas
+    mainLayout->addLayout(topBarLayout);
+    mainLayout->addWidget(m_StatusLabel);
+    mainLayout->addWidget(m_PasswordInput);
+    mainLayout->addLayout(btnLayout);
 
-    // Логика переключения режимов при старте
+    // Старая логика проверки существования базы
     if (IsStorageExists()) {
         m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
-        m_BtnRegister->setEnabled(false); // Нельзя создать новый, пока лежит старый
+        m_BtnRegister->setEnabled(false);
     }
     else {
         m_StatusLabel->setText("Сейф не найден. Придумайте мастер-пароль для инициализации:");
-        m_BtnLogin->setEnabled(false);    // Войти нельзя, файла еще нет
+        m_BtnLogin->setEnabled(false);
     }
 
-    // Коннекты слотов
     connect(m_BtnLogin, &QPushButton::clicked, this, &AuthWindow::HandleBtnLogin);
     connect(m_BtnRegister, &QPushButton::clicked, this, &AuthWindow::HandleBtnRegister);
     connect(importAction, &QAction::triggered, this, &AuthWindow::HandleBtnImportBackup);
@@ -99,21 +119,35 @@ AuthWindow::AuthWindow(QWidget* parent)
 AuthWindow::~AuthWindow() {}
 
 bool AuthWindow::IsStorageExists() const {
-    // 1. Получаем точный абсолютный путь к файлу рядом с бинарником
-    if (!DatabaseManager::instance().initDatabase("SafeData.db")) {
+    // Формируем абсолютный путь к папке с .exe
+    QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
+
+    // ЕСЛИ ФАЙЛА НЕТ НА ДИСКЕ: сразу выходим, не давая SQLite создать пустышку
+    if (!QFile::exists(dbPath)) {
+        // ВРЕМЕННЫЙ ДИАГНОСТИЧЕСКИЙ МЕССЕДЖ-БОКС (удали его, когда всё заработает)
+        ModernMessageBox::showInfo(nullptr, "Диагностика путей",
+            "Программа ищет базу по пути:\n" + dbPath + "\n\nНо этого файла там сейчас НЕТ.");
         return false;
     }
 
+    // Если файл есть, инициализируем подключение
+    if (!DatabaseManager::instance().initDatabase(dbPath)) {
+        return false;
+    }
+
+    // Проверяем наличие таблиц и ключей
     if (DatabaseManager::instance().HasCryptoKeys()) {
         return true;
     }
     return false;
 }
 
+
+
 void AuthWindow::HandleBtnLogin() {
     QString password = m_PasswordInput->text().trimmed();
     if (password.isEmpty()) {
-        QMessageBox::warning(this, "Внимание", "Пароль не может быть пустым!");
+        ModernMessageBox::showWarning(this, "Внимание", "Пароль не может быть пустым!");
         return;
     }
 
@@ -124,7 +158,7 @@ void AuthWindow::HandleBtnLogin() {
     QString MasterSalt, EncryptedDek, DekHash;
     DatabaseManager::instance().LoadCryptoKeys(MasterSalt, EncryptedDek, DekHash);
     if (!DatabaseManager::instance().LoadCryptoKeys(MasterSalt, EncryptedDek, DekHash)) {
-        QMessageBox::critical(this, "Ошибка", "Служебные крипто-данные не найдены в базе!");
+        ModernMessageBox::showCritical(this, "Ошибка", "Служебные крипто-данные не найдены в базе!");
         return;
     }
     salt = MasterSalt.toStdString();
@@ -138,7 +172,7 @@ void AuthWindow::HandleBtnLogin() {
         if (CalculateSHA256(dekForHash) != DEKHash) {
             OPENSSL_cleanse(&decryptedDEK[0], decryptedDEK.length());
             OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
-            QMessageBox::critical(this, "Ошибка доступа", "Неверный мастер-пароль!");
+            ModernMessageBox::showCritical(this, "Ошибка доступа", "Неверный мастер-пароль!");
             return;
         }
         OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
@@ -149,12 +183,12 @@ void AuthWindow::HandleBtnLogin() {
                 try {
                     SecureString DecSecret2FA = DecryptAES(DatabaseManager::instance().GetEncrypted2FASecret(), decryptedDEK, saltVector);
                     if (!Verify2FACode(DecSecret2FA, EnteredCode)) {
-                        QMessageBox::critical(this, "Ошибка доступа", "Неверный код!");
+                        ModernMessageBox::showCritical(this, "Ошибка доступа", "Неверный код!");
                         return;
                     }
                 }
                 catch (...) {
-                    QMessageBox::critical(this, "Ошибка доступа", "Не пройдена 2FA!");
+                    ModernMessageBox::showCritical(this, "Ошибка доступа", "Не пройдена 2FA!");
                     return;
                 }
             }
@@ -168,6 +202,7 @@ void AuthWindow::HandleBtnLogin() {
         m_StatusLabel->setText("Проверка целостности базы данных сейфа...");
 
             // 4. Создаем watcher для слежения за фоновым потоком проверки хэшей
+        QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
         auto* watcher = new QFutureWatcher<bool>(this);
 
         connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher, decryptedDEK, encryptedDEK, salt, inputPassSecureString, DEKHash]() mutable {
@@ -176,7 +211,7 @@ void AuthWindow::HandleBtnLogin() {
             watcher->deleteLater();
 
             if (!integrityOk) {
-                QMessageBox::critical(this, "Критическая ошибка", "Обнаружено несанкционированное изменение данных Сейфа (цепочка хэшей разорвана). Доступ заблокирован!");
+                ModernMessageBox::showCritical(this, "Критическая ошибка", "Обнаружено несанкционированное изменение данных Сейфа (цепочка хэшей разорвана). Доступ заблокирован!");
                 // Разблокируем форму, чтобы дать шанс войти в другой сейф или попробовать снова
                 m_BtnLogin->setEnabled(true);
                 m_PasswordInput->setEnabled(true);
@@ -191,7 +226,6 @@ void AuthWindow::HandleBtnLogin() {
 
             this->close(); // Закрываем окно авторизации[cite: 3]
             });
-        QString dbPath = "SafeData.db";
         // 6. Отправляем ValidateIntegrity() в фоновый пул потоков QtConcurrent
         QFuture<bool> future = QtConcurrent::run([dbPath]() {
             // Создаем уникальное имя соединения для этого конкретного фонового потока
@@ -205,7 +239,6 @@ void AuthWindow::HandleBtnLogin() {
                 threadDb.setDatabaseName(dbPath);
 
                 if (!threadDb.open()) {
-                    qDebug() << "Фоновый поток не смог открыть БД:" << threadDb.lastError().text();
                     QSqlDatabase::removeDatabase(connectionName);
                     return false;
                 }
@@ -255,14 +288,14 @@ void AuthWindow::HandleBtnLogin() {
         m_BtnLogin->setEnabled(true);
         m_PasswordInput->setEnabled(true);
         m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
-        QMessageBox::critical(this, "Ошибка доступа", "Неверный мастер-пароль!");
+        ModernMessageBox::showCritical(this, "Ошибка доступа", "Неверный мастер-пароль!");
     }
 }
 
 void AuthWindow::HandleBtnRegister() {
     QString password = m_PasswordInput->text().trimmed();
     if (password.isEmpty()) {
-        QMessageBox::warning(this, "Внимание", "Введите пароль для инициализации сейфа!");
+        ModernMessageBox::showWarning(this, "Внимание", "Введите пароль для инициализации сейфа!");
         return;
     }
     std::string Salt = GenerateRandomSalt();
@@ -279,11 +312,11 @@ void AuthWindow::HandleBtnRegister() {
         QString::fromStdString(EncryptedDek),
         QString::fromStdString(DEKHash)))
     {
-        QMessageBox::information(this, "Успех", "Сейф успешно создан!");
+        ModernMessageBox::showInfo(this, "Успех", "Сейф успешно создан!");
         this->close();
     }
     else {
-        QMessageBox::warning(this, "Ошибка", "Не удалось инициализировать базу данных.");
+        ModernMessageBox::showWarning(this, "Ошибка", "Не удалось инициализировать базу данных.");
     }
 }
 
@@ -328,8 +361,8 @@ void AuthWindow::HandleBtnImportBackup() {
 
     // Переменные для транзакции и отката
     bool backupInProgress = false;
-    QString dbPath = "SafeData.db";
-    QString backupOldDbPath = "SafeData.db.old";
+    QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
+    QString backupOldDbPath = QCoreApplication::applicationDirPath() + "/SafeData.db.old";
 
     try {
         // 4. Криптографическая проверка пароля бэкапа
@@ -340,7 +373,7 @@ void AuthWindow::HandleBtnImportBackup() {
         if (CalculateSHA256(DekForHash) != DEKHash) {
             OPENSSL_cleanse(&DecryptedDEK[0], DecryptedDEK.length());
             OPENSSL_cleanse(&DekForHash[0], DekForHash.length());
-            QMessageBox::critical(this, "Ошибка доступа", "Неверный пароль от бэкапа!");
+            ModernMessageBox::showCritical(this, "Ошибка доступа", "Неверный пароль от бэкапа!");
             return;
         }
         OPENSSL_cleanse(&DekForHash[0], DekForHash.length());
@@ -397,7 +430,7 @@ void AuthWindow::HandleBtnImportBackup() {
             DatabaseManager::instance().commitTransaction();
             QFile::remove(backupOldDbPath); // Все ок — удаляем старый бэкап БД
 
-            QMessageBox::information(this, "Успех",
+            ModernMessageBox::showInfo(this, "Успех",
                 "База данных успешно восстановлена из бэкапа!\nИспользуйте пароль бэкапа для входа.");
 
             m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
@@ -412,7 +445,7 @@ void AuthWindow::HandleBtnImportBackup() {
         OPENSSL_cleanse(&DecryptedDEK[0], DecryptedDEK.length());
     }
     catch (...) {
-        QMessageBox::critical(this, "Критическая ошибка", "Произошла непредвиденная ошибка при восстановлении базы!");
+        ModernMessageBox::showCritical(this, "Критическая ошибка", "Произошла непредвиденная ошибка при восстановлении базы!");
 
         // Надежный откат файлов на диске в исходное состояние
         if (backupInProgress) {
@@ -438,4 +471,9 @@ void AuthWindow::HandleBtnImportBackup() {
             m_BtnRegister->setEnabled(true);
         }
     }
+}
+void AuthWindow::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    // Вызываем размытие только тогда, когда окно уже создано операционной системой
+    WinThemeUtils::ApplyModernBlur(this);
 }

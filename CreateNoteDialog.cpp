@@ -1,5 +1,6 @@
 ﻿#include "CreateNoteDialog.h"
-
+#include "WinThemeUtils.h"
+#include "ModernMessage.h"
 // Менеджеры разметки (Layouts)
 #include <QDialog>
 #include <QVBoxLayout>
@@ -12,15 +13,21 @@
 #include <QMessageBox>
 #include <QToolBar>
 #include <QAction>
-#include <QFileDialog> // Добавили для выбора файлов
-#include <QFileInfo>   // Добавили для работы с именами и размерами файлов
+#include <QFileDialog> 
+#include <QFileInfo>   
 
 CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
+    setAttribute(Qt::WA_TranslucentBackground, true);
+    WinThemeUtils::ApplyModernBlur(this);
+    setObjectName("CreateNoteDialog");
     setWindowTitle("Создание новой заметки");
-    setMinimumWidth(450); // Чуть увеличили ширину для комфортного размещения вложений
-    setMinimumHeight(550); // Увеличили высоту, чтобы всё красиво влезло
+    setMinimumWidth(480); // Немного увеличили для лучшей эргономики
+    setMinimumHeight(600);
 
     QVBoxLayout* MainLayout = new QVBoxLayout(this);
+    // Добавляем комфортные отступы от краев окна, чтобы интерфейс "дышал"
+    MainLayout->setContentsMargins(20, 20, 20, 20);
+    MainLayout->setSpacing(10);
 
     QLabel* NameLabel = new QLabel("Название заметки:", this);
     m_NameInput = new QLineEdit(this);
@@ -28,8 +35,37 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     MainLayout->addWidget(NameLabel);
     MainLayout->addWidget(m_NameInput);
 
+    // --- НАСТРОЙКА MARKDOWN TOOLBAR ---
     QToolBar* mdToolBar = new QToolBar("Форматирование", this);
-    mdToolBar->setStyleSheet("QToolBar { background-color: #252526; padding: 2px; border-radius: 4px; }");
+    mdToolBar->setObjectName("MarkdownToolBar");
+    mdToolBar->setMovable(false);
+    mdToolBar->setFloatable(false);
+
+    // Стиль для самого тулбара и его внутренних кнопок-иконок
+    mdToolBar->setStyleSheet(
+        "QToolBar#MarkdownToolBar { "
+        "   background: rgba(255, 255, 255, 0.03); "
+        "   border: 1px solid rgba(255, 255, 255, 0.08); "
+        "   border-radius: 8px; "
+        "   padding: 4px; "
+        "}"
+        "QToolBar#MarkdownToolBar QToolButton { "
+        "   background: transparent; "
+        "   color: #e2e8f0; "
+        "   border-radius: 4px; "
+        "   font-weight: bold; "
+        "   font-size: 12px; "
+        "   padding: 4px 10px; "
+        "   margin-right: 4px; "
+        "}"
+        "QToolBar#MarkdownToolBar QToolButton:hover { "
+        "   background: rgba(255, 255, 255, 0.1); "
+        "   color: #ffffff; "
+        "}"
+        "QToolBar#MarkdownToolBar QToolButton:pressed { "
+        "   background: rgba(255, 255, 255, 0.05); "
+        "}"
+    );
 
     // Кнопка Жирный текст (Bold)
     QAction* boldAction = mdToolBar->addAction("B");
@@ -44,7 +80,7 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
         });
 
     // Кнопка Курсив (Italic)
-    QAction* italicAction = mdToolBar->addAction("/");
+    QAction* italicAction = mdToolBar->addAction("I"); // Поменяли "/" на понятную "I"
     italicAction->setToolTip("Курсив");
     connect(italicAction, &QAction::triggered, this, [this]() {
         QTextCursor cursor = m_TextInput->textCursor();
@@ -68,6 +104,14 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     // 2. Поле ввода текста заметки
     QLabel* TextLabel = new QLabel("Содержимое (текст):", this);
     m_TextInput = new QTextEdit(this);
+
+    QPalette textPal = m_TextInput->palette();
+    textPal.setColor(QPalette::Base, Qt::transparent);
+    m_TextInput->setPalette(textPal);
+    // ---> ДОБАВЛЯЕМ ЭТИ ДВЕ СТРОКИ ДЛЯ БОРЬБЫ С БЕЛЫМ ФОНОМ <---
+    m_TextInput->viewport()->setAutoFillBackground(false);
+    m_TextInput->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
+
     m_TextInput->setPlaceholderText("Напишите что-нибудь секретное...");
     MainLayout->addWidget(TextLabel);
     MainLayout->addWidget(m_TextInput);
@@ -75,7 +119,7 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     // Разделительная линия
     QFrame* line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
-    line->setFrameShadow(QFrame::Sunken);
+    line->setStyleSheet("background-color: rgba(255, 255, 255, 0.06); max-height: 1px; border: none;");
     MainLayout->addWidget(line);
 
     // 3. Выбор режима шифрования (Чекбокс)
@@ -95,7 +139,7 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     // Разделитель перед тегами и вложениями
     QFrame* line2 = new QFrame(this);
     line2->setFrameShape(QFrame::HLine);
-    line2->setFrameShadow(QFrame::Sunken);
+    line2->setStyleSheet("background-color: rgba(255, 255, 255, 0.06); max-height: 1px; border: none;");
     MainLayout->addWidget(line2);
 
     // ================= [ СЕКЦИЯ ТЕГОВ ] =================
@@ -106,10 +150,11 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     m_TagInput->setPlaceholderText("Добавить тег (например: работа)...");
 
     m_AddTagButton = new QPushButton("+", this);
-    m_AddTagButton->setFixedWidth(30);
+    m_AddTagButton->setFixedWidth(34);
     m_AddTagButton->setObjectName("AddTagButton");
 
     QHBoxLayout* tagInputLayout = new QHBoxLayout();
+    tagInputLayout->setSpacing(8);
     tagInputLayout->addWidget(m_TagInput);
     tagInputLayout->addWidget(m_AddTagButton);
     MainLayout->addLayout(tagInputLayout);
@@ -117,7 +162,7 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     QWidget* tagsContainer = new QWidget(this);
     m_TagsLayout = new QHBoxLayout(tagsContainer);
     m_TagsLayout->setContentsMargins(0, 4, 0, 4);
-    m_TagsLayout->setSpacing(4);
+    m_TagsLayout->setSpacing(6);
     MainLayout->addWidget(tagsContainer);
 
     connect(m_AddTagButton, &QPushButton::clicked, this, [this]() {
@@ -136,33 +181,31 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     QLabel* AttachmentLabel = new QLabel("Зашифрованные вложения:", this);
     MainLayout->addWidget(AttachmentLabel);
 
-    // Строка выбора файла (информационное поле + кнопка обзора)
     m_AttachmentPathDisplay = new QLineEdit(this);
     m_AttachmentPathDisplay->setReadOnly(true);
     m_AttachmentPathDisplay->setPlaceholderText("Выберите файл на компьютере...");
 
     m_BrowseAttachmentButton = new QPushButton("Обзор...", this);
     m_BrowseAttachmentButton->setObjectName("BrowseAttachmentButton");
-    m_BrowseAttachmentButton->setStyleSheet("padding: 4px 12px;");
+    m_BrowseAttachmentButton->setFixedHeight(38); // Выравниваем по высоте с QLineEdit
 
     m_AddAttachmentButton = new QPushButton("+", this);
-    m_AddAttachmentButton->setFixedWidth(30);
+    m_AddAttachmentButton->setFixedWidth(34);
     m_AddAttachmentButton->setObjectName("AddAttachmentButton");
 
     QHBoxLayout* attachmentInputLayout = new QHBoxLayout();
+    attachmentInputLayout->setSpacing(8);
     attachmentInputLayout->addWidget(m_AttachmentPathDisplay);
     attachmentInputLayout->addWidget(m_BrowseAttachmentButton);
     attachmentInputLayout->addWidget(m_AddAttachmentButton);
     MainLayout->addLayout(attachmentInputLayout);
 
-    // Контейнер, где будут отображаться плашки добавленных файлов
     QWidget* attachmentsContainer = new QWidget(this);
     m_AttachmentsLayout = new QHBoxLayout(attachmentsContainer);
     m_AttachmentsLayout->setContentsMargins(0, 4, 0, 4);
     m_AttachmentsLayout->setSpacing(6);
     MainLayout->addWidget(attachmentsContainer);
 
-    // Клик на кнопку "Обзор..."
     connect(m_BrowseAttachmentButton, &QPushButton::clicked, this, [this]() {
         QString filePath = QFileDialog::getOpenFileName(this, "Выбрать файл для вложения");
         if (!filePath.isEmpty()) {
@@ -170,14 +213,12 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
         }
         });
 
-    // Клик на кнопку "+" добавления файла в список вложений
     connect(m_AddAttachmentButton, &QPushButton::clicked, this, [this]() {
         QString filePath = m_AttachmentPathDisplay->text().trimmed();
         if (!filePath.isEmpty()) {
             QFileInfo fileInfo(filePath);
             if (fileInfo.exists()) {
                 QString fileName = fileInfo.fileName();
-                // Защита от дублирования файлов с одинаковыми путями
                 if (!m_PendingAttachments.contains(fileName)) {
                     m_PendingAttachments.insert(fileName, filePath);
                     UpdateDialogAttachments();
@@ -185,7 +226,7 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
                 m_AttachmentPathDisplay->clear();
             }
             else {
-                QMessageBox::warning(this, "Ошибка", "Указанный файл не существует!");
+                ModernMessageBox::showWarning(this, "Ошибка", "Указанный файл не существует!");
             }
         }
         });
@@ -193,10 +234,11 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
     // ================= [ КНОПКИ УПРАВЛЕНИЯ ] =================
     QFrame* line3 = new QFrame(this);
     line3->setFrameShape(QFrame::HLine);
-    line3->setFrameShadow(QFrame::Sunken);
+    line3->setStyleSheet("background-color: rgba(255, 255, 255, 0.06); max-height: 1px; border: none;");
     MainLayout->addWidget(line3);
 
     QHBoxLayout* buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(12);
     m_SaveButton = new QPushButton("Сохранить", this);
     m_CancelButton = new QPushButton("Отмена", this);
     m_SaveButton->setDefault(true);
@@ -211,70 +253,57 @@ CreateNoteDialog::CreateNoteDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void CreateNoteDialog::UpdateDialogTags() {
-    // Очищаем старые виджеты тегов с экрана диалога
     QLayoutItem* item;
     while ((item = m_TagsLayout->takeAt(0)) != nullptr) {
         if (item->widget()) delete item->widget();
         delete item;
     }
 
-    // Рисуем кнопки для текущих тегов
     for (size_t i = 0; i < m_CurrentTags.size(); ++i) {
         std::string tag = m_CurrentTags[i];
-
-        // Добавляем к тексту крестик, чтобы пользователь понял: сюда можно кликнуть для удаления
         QString btnText = QString("%1  ×").arg(QString::fromStdString(tag));
         QPushButton* tagBtn = new QPushButton(btnText, this);
-        tagBtn->setObjectName("DialogTagButton"); // ID для стилизации в QSS
+        tagBtn->setObjectName("TagButton");
 
-        // Если пользователь кликает по тегу — удаляем его!
         connect(tagBtn, &QPushButton::clicked, this, [this, tag]() {
-            // Ищем тег в векторе и удаляем его
             auto it = std::find(m_CurrentTags.begin(), m_CurrentTags.end(), tag);
             if (it != m_CurrentTags.end()) {
                 m_CurrentTags.erase(it);
             }
-            UpdateDialogTags(); // Мгновенно обновляем интерфейс окна
+            UpdateDialogTags();
             });
 
         m_TagsLayout->addWidget(tagBtn);
     }
-
-    // Прижимаем теги к левому краю окна
     m_TagsLayout->addStretch();
 }
 
 void CreateNoteDialog::UpdateDialogAttachments() {
-    // Очищаем старые виджеты
     QLayoutItem* item;
     while ((item = m_AttachmentsLayout->takeAt(0)) != nullptr) {
         if (item->widget()) delete item->widget();
         delete item;
     }
 
-    // Создаем красивые кнопки-плашки для каждого добавленного файла
     for (auto it = m_PendingAttachments.begin(); it != m_PendingAttachments.end(); ++it) {
         QString fileName = it.key();
         QString filePath = it.value();
         QFileInfo info(filePath);
 
-        // Форматируем размер файла для красоты
         double sizeMb = static_cast<double>(info.size()) / (1024.0 * 1024.0);
         QString sizeStr = sizeMb < 0.1
             ? QString("%1 KB").arg(info.size() / 1024)
             : QString("%1 MB").arg(sizeMb, 0, 'f', 1);
 
-        // Формируем текст на плашке: "📎 ИмяФайла.расш (Размер)  ✕"
         QString badgeText = QString("📎 %1 (%2)  ✕").arg(fileName, sizeStr);
 
         QPushButton* fileBtn = new QPushButton(badgeText, this);
-        fileBtn->setObjectName("DialogAttachmentButton"); // ID для стилизации в Style.qss
-        fileBtn->setToolTip(filePath); // При наведении показываем полный исходный путь
+        fileBtn->setObjectName("TagButton");
+        fileBtn->setToolTip(filePath);
 
-        // При клике на плашку — удаляем файл из списка вложений
         connect(fileBtn, &QPushButton::clicked, this, [this, fileName]() {
             m_PendingAttachments.remove(fileName);
-            UpdateDialogAttachments(); // Мгновенное обновление
+            UpdateDialogAttachments();
             });
 
         m_AttachmentsLayout->addWidget(fileBtn);
@@ -283,17 +312,20 @@ void CreateNoteDialog::UpdateDialogAttachments() {
 }
 
 void CreateNoteDialog::HandleSave() {
+    if (!IsAutoEncryptChecked() && m_CustomKeyInput->text().trimmed().isEmpty()) {
+        ModernMessageBox::showWarning(this, "Предупреждение", "Ключ шифрования не может быть пустым!");
+        return;
+    }
     if (m_NameInput->text().trimmed().isEmpty()) {
-        QMessageBox::warning(this, "Предупреждение", "Название заметки не может быть пустым!");
+        ModernMessageBox::showWarning(this, "Предупреждение", "Название заметки не может быть пустым!");
         return;
     }
     accept();
 }
- 
+
 void CreateNoteDialog::HandleCancel() {
     reject();
 }
-
 
 void CreateNoteDialog::HandleCheckBox(bool checked) {
     m_CustomKeyInput->setEnabled(!checked);
@@ -307,22 +339,21 @@ void CreateNoteDialog::HandleCheckBox(bool checked) {
     }
 }
 
-CreateNoteDialog::~CreateNoteDialog(){
+CreateNoteDialog::~CreateNoteDialog() {}
 
-}
-
-std::string CreateNoteDialog::GetName() const{
+std::string CreateNoteDialog::GetName() const {
     return m_NameInput->text().trimmed().toStdString();
 }
 
 SecureString CreateNoteDialog::GetText() const {
     return QStringToSecureString(m_TextInput->toMarkdown().trimmed());
 }
-bool CreateNoteDialog::IsAutoEncryptChecked() const{
+
+bool CreateNoteDialog::IsAutoEncryptChecked() const {
     return m_AutoEncryptCheck->isChecked();
 }
 
-SecureString CreateNoteDialog::GetCustomKey() const{
+SecureString CreateNoteDialog::GetCustomKey() const {
     return QStringToSecureString(m_CustomKeyInput->text().trimmed());
 }
 

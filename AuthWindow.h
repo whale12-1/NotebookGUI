@@ -22,7 +22,8 @@ private slots:
     void HandleBtnLogin();    
     void HandleBtnRegister();
     void HandleBtnImportBackup();
-
+protected:
+    void showEvent(QShowEvent* event) override;
 private:
     bool IsStorageExists() const;
     // Элементы интерфейса

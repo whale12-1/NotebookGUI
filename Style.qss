@@ -1,61 +1,26 @@
 ﻿/* ==========================================================================
-   ГЛОБАЛЬНЫЕ НАСТРОЙКИ И ОКНА
+   ГЛОБАЛЬНЫЕ НАСТРОЙКИ ОКРЫТЫХ ОКОН И КАНВАСА
    ========================================================================== */
-QMainWindow, QDialog, AuthWindow {
-    background-color: #0e0f14; /* Сделали фоновый цвет чуть глубже и благороднее */
-    color: #f1f5f9;            /* Слегка увеличили контраст текста */
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
+
+/* Полностью убираем любые жесткие фоны у корневых окон, чтобы работал Mica */
+QMainWindow, 
+QDialog, 
+QWidget#AuthWindowInstance, 
+QWidget#MainWindowInstance,
+#AuthWindowInstance, 
+#MainWindowInstance {
+    background-color: transparent !important;
+    background: transparent !important;
+    color: #f1f5f9;            
+    font-family: "Segoe UI", -apple-system, sans-serif;
 }
 
-/* Вкладки (для окна настроек SettingsDialog) */
-QTabWidget::pane {
-    border: 1px solid rgba(255, 255, 255, 0.06); /* Тонкая полупрозрачная граница */
-    background-color: #151720;
-    border-radius: 10px; /* Скругление чуть больше для мягкости */
-    top: -1px;
-}
-QTabBar::tab {
-    background-color: transparent; /* Убрали лишние рамки неактивных вкладок */
-    color: #64748b;
-    padding: 10px 20px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-right: 8px;
-    font-weight: 500;
-}
-QTabBar::tab:selected {
-    background-color: transparent;
-    color: #7289da;
-    border-bottom: 2px solid #7289da; /* Стильный нижний подчеркивающий индикатор */
-    font-weight: 600;
-}
-QTabBar::tab:hover:!selected {
-    color: #e2e8f0;
-}
-
-/* Элементы интерфейса (Чекбоксы, Статические тексты) */
-QCheckBox {
-    color: #e2e8f0;
-    spacing: 8px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 1.5px solid rgba(255, 255, 255, 0.15);
-    border-radius: 5px;
-    background-color: #151720;
-}
-QCheckBox::indicator:checked {
-    background-color: #7289da;
-    border-color: #7289da;
-    image: url(:/icons/checkmark.svg); 
-}
-QCheckBox::indicator:hover {
-    border-color: rgba(114, 137, 218, 0.6);
-}
-
-QLabel {
-    color: #94a3b8; 
+/* Наша единая подложка-карточка (Canvas) 
+   Легкий белый глянец отлично пропускает и подчеркивает текстуру Mica под ней */
+QWidget#MainCanvas {
+    background-color: rgba(255, 255, 255, 0.03); 
+    border: 1px solid rgba(255, 255, 255, 0.08); 
+    border-radius: 12px;
 }
 
 
@@ -63,134 +28,210 @@ QLabel {
    ПОЛЯ ВВОДА (ПОИСК И ПАРОЛИ)
    ========================================================================== */
 QLineEdit {
-    background-color: #151720;
-    border: 1px solid rgba(255, 255, 255, 0.08); /* Мягкая граница */
+    background-color: rgba(20, 21, 28, 0.6); /* Полупрозрачный темный фон */
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
-    padding: 10px 14px; /* Чуть просторнее */
+    padding: 10px 14px;
     color: #f8fafc;
     font-size: 13px;
 }
 QLineEdit:focus {
-    border: 1px solid #7289da; /* Четкий акцентный фокус */
-    background-color: #1a1c26; /* Легкое осветление фона при вводе */
+    background-color: rgba(20, 21, 28, 0.85); /* Чуть плотнее при фокусе, чтобы текст читался идеально */
+    border: 1.5px solid #7289da; /* Фирменный акцентный фокус */
 }
 QLineEdit::placeholder {
-    color: #475569; /* Приглушенный плейсхолдер */
+    color: rgba(255, 255, 255, 0.35); /* Неконтрастный читаемый плейсхолдер */
 }
 
 
 /* ==========================================================================
-   СПИСОК ЗАМЕТОК (КАРТОЧКИ)
+   ОБЩИЕ КНОПКИ (Глянцевый Mica-стиль)
+   ========================================================================== */
+QPushButton {
+    background-color: rgba(255, 255, 255, 0.06); /* Мягкое стекло */
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    color: #f1f5f9;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: rgba(255, 255, 255, 0.12); /* Приближение при наведении */
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+}
+
+QPushButton:pressed {
+    background-color: rgba(255, 255, 255, 0.04); /* Проседание при клике */
+}
+
+/* ЗАМЫЛЕННОЕ / ЗАБЛОКИРОВАННОЕ СОСТОЯНИЕ (как на твоем скриншоте) */
+QPushButton:disabled {
+    background-color: rgba(255, 255, 255, 0.01) !important;
+    border-color: rgba(255, 255, 255, 0.02) !important;
+    color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Опасное действие — Кнопка удаления */
+QMainWindow QPushButton#m_DeleteButton {
+    background-color: rgba(239, 68, 68, 0.15); /* Полупрозрачный красный */
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+QMainWindow QPushButton#m_DeleteButton:hover {
+    background-color: rgba(239, 68, 68, 0.8); /* Яркий красный при наведении */
+    border-color: rgba(239, 68, 68, 0.8);
+    color: #ffffff;
+}
+QMainWindow QPushButton#m_DeleteButton:disabled {
+    background-color: rgba(239, 68, 68, 0.03) !important;
+    border-color: rgba(239, 68, 68, 0.05) !important;
+    color: rgba(239, 68, 68, 0.2) !important;
+}
+
+
+/* ==========================================================================
+   КНОПКА НАСТРОЕК (Шестерёнка авторизации и верхний бар)
+   ========================================================================== */
+QPushButton#Settings2FABtn,
+QPushButton#AuthSettingsButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    font-size: 16px;
+    padding: 0px;
+}
+
+QPushButton#Settings2FABtn:hover,
+QPushButton#AuthSettingsButton:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+QPushButton#Settings2FABtn:pressed,
+QPushButton#AuthSettingsButton:pressed {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Скрываем уродливую уплывшую стрелку меню у шестерёнки */
+QPushButton#AuthSettingsButton::menu-indicator,
+QPushButton#Settings2FABtn::menu-indicator {
+    image: none;
+    width: 0px;
+    height: 0px;
+    visible: none;
+}
+
+
+/* ==========================================================================
+   ВЫПАДАЮЩИЕ СИСТЕМНЫЕ МЕНЮ (QMenu)
+   ========================================================================== */
+QMenu {
+    background-color: rgba(25, 26, 32, 0.96); /* Плотное темное стекло */
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 4px 0px;
+}
+QMenu::item {
+    padding: 6px 28px 6px 16px;
+    color: #cbd5e1;
+    background-color: transparent;
+}
+QMenu::item:selected {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+QMenu::separator {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.08);
+    margin: 4px 0px;
+}
+
+
+/* ==========================================================================
+   СПИСОК ЗАМЕТОК И КАРТОЧКИ (QListView)
    ========================================================================== */
 QListView {
-    background-color: transparent; /* Список сливается с общим глубоким фоном */
-    border: none;
-    padding: 4px;
+    background-color: rgba(0, 0, 0, 0.2); /* Темная подложка, чтобы выделить список */
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 6px;
     outline: 0;
 }
 
-/* Обычное состояние карточки заметки */
+/* Карточка заметки в обычном состоянии */
 QListView::item {
-    background-color: #151720; 
-    border: 1px solid rgba(255, 255, 255, 0.05); /* Тончайшая дорогая рамка */
-    border-radius: 12px; /* Современные скругленные углы */
-    padding: 16px 20px;  /* Больше "воздуха" внутри карточки */
+    background-color: rgba(255, 255, 255, 0.03); /* Мягкие стеклянные карточки */
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    padding: 14px 18px;
     color: #cbd5e1;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
-/* Наведение на карточку */
 QListView::item:hover {
-    background-color: #1b1e2a;
-    border-color: rgba(255, 255, 255, 0.1); /* Проявляющаяся при наведении рамка */
+    background-color: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.08);
     color: #f8fafc;
 }
 
-/* Выделенная карточка (Активная заметка) */
+/* Выбранная карточка (Активная заметка) */
 QListView::item:selected,
 QListView::item:selected:active,
 QListView::item:selected:!active {
-    background-color: #1d2133 !important; /* Глубокий синеватый оттенок */
-    border: 1px solid #7289da !important;  
+    background-color: rgba(114, 137, 218, 0.15) !important; /* Легкий акцентный синеватый тон */
+    border: 1.5px solid #7289da !important;  
     color: #ffffff !important;
     font-weight: 600;
 }
 
 QListView::item:selected:hover {
-    background-color: #22273d !important;
-    border-color: #7289da !important;
+    background-color: rgba(114, 137, 218, 0.2) !important;
 }
 
 
 /* ==========================================================================
-   КНОПКИ (Улучшенный глянец и глубина)
+   ВКЛАДКИ (Табы в настройках SettingsDialog)
    ========================================================================== */
-/* Дефолтная кнопка */
-QPushButton {
-    background-color: #151720;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    color: #e2e8f0;
-    padding: 10px 18px; /* Увеличили вертикальный кликабельный размер */
-    font-size: 13px;
+QTabWidget::pane {
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background-color: rgba(20, 21, 28, 0.4); /* Полупрозрачная панель вкладок */
+    border-radius: 10px;
+    top: -1px;
+}
+QTabBar::tab {
+    background-color: transparent;
+    color: #64748b;
+    padding: 8px 16px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-right: 6px;
+    font-weight: 500;
+}
+QTabBar::tab:selected {
+    color: #7289da;
+    border-bottom: 2px solid #7289da; /* Элегантное подчеркивание активного таба */
     font-weight: 600;
 }
-QPushButton:hover {
-    background-color: #1d2130;
-    color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.15);
-}
-QPushButton:pressed {
-    background-color: #0e0f14;
+QTabBar::tab:hover:!selected {
+    color: #e2e8f0;
 }
 
-/* Опасное действие — Кнопка удаления */
-QMainWindow QPushButton#m_DeleteButton {
-    background-color: rgba(239, 68, 68, 0.1); /* Полупрозрачный красный фон */
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    color: #fca5a5;
-}
-QMainWindow QPushButton#m_DeleteButton:hover {
-    background-color: #ef4444; /* Насыщенный красный при наведении */
-    color: #ffffff;
-    border-color: #ef4444;
-}
 
-/* Кнопки-иконки управления (Добавить "+", Настройки) */
-/* Кнопки добавления (плюсики для тегов и файлов) */
-QPushButton[text*="+"], 
-QPushButton#AddTagButton,
-QPushButton#AddAttachmentButton, /* Добавил предполагаемое имя кнопки вложений */
-QPushButton#m_AddTagButton,      /* На случай префикса m_ */
-QPushButton#m_AddAttachmentButton {
-    background-color: rgba(114, 137, 218, 0.1); /* Полупрозрачный синий фон */
-    border: 1px solid rgba(114, 137, 218, 0.25);
-    border-radius: 8px;
-    font-weight: bold;
-    color: #7289da !important; /* Форсируем красивый синий цвет для плюса */
-    font-size: 18px;
-    min-width: 34px;  /* Задаем аккуратный размер, чтобы кнопка была квадратной */
-    max-width: 34px;
-}
-
-QPushButton[text*="+"]:hover, 
-QPushButton#AddTagButton:hover,
-QPushButton#AddAttachmentButton:hover,
-QPushButton#m_AddTagButton:hover,
-QPushButton#m_AddAttachmentButton:hover {
-    background-color: #7289da;
-    color: #ffffff !important; /* При наведении плюс становится белым */
-    border-color: #7289da;
-}
-
-QPushButton[text*="+"]:pressed, 
-QPushButton#AddTagButton:pressed {
-    background-color: #5b73c7;
-}
-/* Теги (Круглые плашки) */
+/* ==========================================================================
+   ТЕГИ И ДВУХФАКТОРНЫЕ КНОПКИ "+"
+   ========================================================================== */
+/* Кнопки-теги */
 QPushButton#TagButton {
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.03);
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.02);
     border-radius: 12px;
     color: #94a3b8;
     padding: 4px 12px;
@@ -201,70 +242,101 @@ QPushButton#TagButton:hover {
     color: #7289da;
 }
 
+/* Кнопки добавления (плюсики) */
+QPushButton[text*="+"], 
+QPushButton#AddTagButton,
+QPushButton#AddAttachmentButton,
+QPushButton#m_AddTagButton,
+QPushButton#m_AddAttachmentButton {
+    background-color: rgba(114, 137, 218, 0.12);
+    border: 1px solid rgba(114, 137, 218, 0.25);
+    border-radius: 8px;
+    color: #7289da !important;
+    font-size: 18px;
+    min-width: 34px;
+    max-width: 34px;
+}
+QPushButton[text*="+"]:hover, 
+QPushButton#AddTagButton:hover,
+QPushButton#AddAttachmentButton:hover {
+    background-color: #7289da;
+    color: #ffffff !important;
+}
+
 
 /* ==========================================================================
-   РЕДАКТОР ЗАМЕТОК
-   ========================================================================== */
+   ТЕКСТОВЫЕ ЭЛЕМЕНТЫ И РЕДАКТОРЫ (QTextEdit)
 QTextEdit {
-    background-color: #0b0c10; /* Редактор темнее, чтобы сфокусироваться на тексте */
+    background-color: rgba(20, 21, 28, 0.4) !important; /* Наше красивое стекло */
     color: #f1f5f9;
-    font-family: "Fira Code", "Consolas", monospace; /* Добавили современный Fira Code */
+    font-family: "Fira Code", "Consolas", monospace;
     font-size: 14px;
-    line-height: 1.6;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     padding: 16px;
 }
+
+/* Полностью очищаем фон и любые рамки внутреннего контейнера */
+QTextEdit QWidget {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+}
+
 QTextEdit:focus {
-    border-color: rgba(114, 137, 218, 0.4); /* Мягкое свечение */
+    background-color: rgba(20, 21, 28, 0.6) !important;
+    border-color: #7289da;
 }
 
-/* Панель инструментов */
-QToolBar {
-    background-color: #0e0f14;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-bottom: none;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    spacing: 6px;
-    padding: 6px;
+/* Убеждаемся, что при фокусе внутренний виджет тоже остается прозрачным */
+QTextEdit:focus QWidget {
+    background: transparent !important;
+    background-color: transparent !important;
 }
-QToolButton {
-    background-color: transparent;
-    color: #94a3b8;
-    border-radius: 6px;
-    padding: 6px 10px;
-}
-QToolButton:hover {
-    background-color: rgba(255, 255, 255, 0.06);
-    color: #ffffff;
+QLabel {
+    color: #94a3b8; 
 }
 
+QCheckBox {
+    color: #e2e8f0;
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    background-color: rgba(20, 21, 28, 0.6);
+}
+QCheckBox::indicator:checked {
+    background-color: #7289da;
+    border-color: #7289da;
+}
 
-/* ==========================================================================
-   КНОПКА НАСТРОЕК (ВЕРХНИЙ БАР АВТОРИЗАЦИИ И ГЛАВНОГО ОКНА)
-   ========================================================================== */
-QPushButton#Settings2FABtn {
-    background-color: transparent; /* Сделали её "стеклянной" по умолчанию */
-    border: 1px solid transparent;
+QDialog#CreateNoteDialog QFrame[frameShape="4"] { /* 4 — это внутреннее значение QFrame::HLine в Qt */
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    min-height: 1px;
+    max-height: 1px;
+    border: none;
+}
+
+QPushButton#BrowseAttachmentButton {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
-    color: #64748b;
-    
-    min-width: 32px;
-    max-width: 32px;
-    min-height: 32px;
-    max-height: 32px;
-    
-    font-size: 16px;
-    padding: 0px;
+    color: #e2e8f0;
+    font-size: 13px;
+    padding: 0px 16px; /* Переопределяем огромные отступы */
 }
 
-QPushButton#Settings2FABtn:hover {
-    background-color: rgba(255, 255, 255, 0.05); /* Легкий отклик при наведении */
-    color: #f1f5f9;
-    border-color: rgba(255, 255, 255, 0.08);
+QPushButton#BrowseAttachmentButton:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
-QPushButton#Settings2FABtn:pressed {
-    background-color: rgba(0, 0, 0, 0.2);
+/* Исправляем читаемость плейсхолдера у заблокированного поля */
+QLineEdit:disabled {
+    background-color: rgba(20, 21, 28, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.02) !important;
+    color: rgba(255, 255, 255, 0.25) !important;
 }

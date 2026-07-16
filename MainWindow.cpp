@@ -1,6 +1,8 @@
 ﻿#include "MainWindow.h"
 #include "AuthWindow.h"
+#include "WinThemeUtils.h"
 #include "SettingsDialog.h"
+#include "ModernMessage.h"
 // Разметки (Layouts) для красивого расположения кнопок
 #include <QVBoxLayout>   
 #include <QHBoxLayout>   
@@ -46,25 +48,46 @@ bool MainWindow::event(QEvent* event) {
 
 MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("data.txt") {
     setWindowTitle("Твой Сейф Заметок (Завершено)");
+    this->setObjectName("MainWindowInstance");
     resize(800, 600);
-    // 1. Создаем специальный центральный виджет-контейнер
+
+    // Включаем прозрачность для главного окна, чтобы работал Mica
+    this->setAttribute(Qt::WA_TranslucentBackground, true);
+    WinThemeUtils::ApplyModernBlur(this);
+
+    // Главный контейнер
     QWidget* centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget); // Устанавливаем его главным в QMainWindow
+    setCentralWidget(centralWidget);
 
-    // 2. ИСПРАВЛЕНО: Привязываем QVBoxLayout к centralWidget, а не к this!
-    QVBoxLayout* MainLayout = new QVBoxLayout(centralWidget);
+    // Чтобы центральный виджет не имел своего фона
+    centralWidget->setAttribute(Qt::WA_TranslucentBackground, true);
 
-    // 3. Добавляем элементы в слой как обычно
-    QLabel* WelcomeLabel = new QLabel("Выберите заметку из списка и нажмите «Расшифровать»:", centralWidget);
+    // Слой для центрального виджета, который растянет нашу "карточку" на все окно с красивыми отступами
+    QVBoxLayout* rootLayout = new QVBoxLayout(centralWidget);
+    rootLayout->setContentsMargins(0, 0, 0, 0); // Отступы от краев экрана до нашей панели
+
+    // --- НАША КРАСИВАЯ ПОДЛОЖКА (КАНВАС) ---
+    QWidget* mainCanvas = new QWidget(centralWidget);
+    mainCanvas->setObjectName("MainCanvas"); // Зададим имя для QSS
+    rootLayout->addWidget(mainCanvas);
+
+    // Теперь всю внутреннюю разметку вешаем на mainCanvas!
+    QVBoxLayout* MainLayout = new QVBoxLayout(mainCanvas);
+    MainLayout->setContentsMargins(20, 20, 20, 20); // Внутренние отступы внутри сейфа
+    MainLayout->setSpacing(12);
+
+    // Переносим добавление виджетов на mainCanvas (вместо centralWidget)
+    QLabel* WelcomeLabel = new QLabel("Выберите заметку из списка и нажмите «Расшифровать»:", mainCanvas);
     MainLayout->addWidget(WelcomeLabel);
-    m_NotesView = new QListView(centralWidget);
+
+    m_NotesView = new QListView(mainCanvas);
     MainLayout->addWidget(m_NotesView);
 
-    m_SearchField = new QLineEdit(centralWidget);
+    m_SearchField = new QLineEdit(mainCanvas);
     m_SearchField->setPlaceholderText("🔍 Быстрый поиск заметок...");
     MainLayout->addWidget(m_SearchField);
     // Создаем горизонтальный контейнер для тегов
-    QWidget* tagsContainer = new QWidget(centralWidget);
+    QWidget* tagsContainer = new QWidget(mainCanvas);
     m_TagsLayout = new QHBoxLayout(tagsContainer);
     m_TagsLayout->setContentsMargins(0, 0, 0, 0);
     m_TagsLayout->setSpacing(6); // Расстояние между кнопками-тегами
@@ -97,17 +120,17 @@ MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("dat
 
     MainLayout->insertLayout(0, topBarLayout);
     // Кнопка "Расшифровать"
-    m_DecryptButton = new QPushButton("🔑 Расшифровать выбранную заметку", centralWidget); // Вместо this
+    m_DecryptButton = new QPushButton("🔑 Расшифровать выбранную заметку", mainCanvas); // Вместо this
     MainLayout->addWidget(m_DecryptButton);
     // Кнопка "Добавить заметку"
-    m_CreateButton = new QPushButton("➕ Добавить новую заметку", centralWidget); // Вместо this
+    m_CreateButton = new QPushButton("➕ Добавить новую заметку",mainCanvas); // Вместо this
     MainLayout->addWidget(m_CreateButton);
     // Кнопка "Удалить"
-    m_DeleteButton = new QPushButton("Удалить заметку", centralWidget); // Вместо this
-    m_DeleteButton->setStyleSheet("QPushButton { background-color: #d9534f; color: white; } QPushButton:hover { background-color: #c9302c; }");
+    m_DeleteButton = new QPushButton("Удалить заметку", mainCanvas);
+    m_DeleteButton->setObjectName("m_DeleteButton");
     MainLayout->addWidget(m_DeleteButton);
     // Кнопка "Сменить Мастер-пароль"
-    m_ChangePassButton = new QPushButton("🔒 Сменить Мастер-пароль", centralWidget); // Вместо this
+    m_ChangePassButton = new QPushButton("🔒 Сменить Мастер-пароль", mainCanvas); // Вместо this
     MainLayout->addWidget(m_ChangePassButton);
 
     m_ClipboardTimer = new QTimer(this);
@@ -127,6 +150,11 @@ MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("dat
     // Когда текст в строке поиска меняется, прокси-модель автоматически применяет его как фильтр
     connect(m_SearchField, &QLineEdit::textChanged, m_ProxyModel, &QSortFilterProxyModel::setFilterFixedString);
     connect(m_SettingsBtn, &QPushButton::clicked, this, &HandleBtnSettingsClicked);
+
+    this->setWindowFlags(Qt::Window | Qt::WindowCloseButtonHint | Qt::WindowMinimizeButtonHint);
+    this->setAttribute(Qt::WA_TranslucentBackground, true);
+    WinThemeUtils::ApplyModernBlur(this);
+
 }
 
 void MainWindow::OnCopySecretClicked(const QString& secretText) {
@@ -247,7 +275,7 @@ void MainWindow::HandleAddNote() {
             EncryptedText = EncryptAES(RawText, Key, RandomSaltVector);
         }
         catch (...) {
-            QMessageBox::critical(this, "Ошибка", "Не удалось зашифровать заметку.");
+            ModernMessageBox::showCritical(this, "Ошибка", "Не удалось зашифровать заметку.");
             return;
         }
 
@@ -284,17 +312,17 @@ void MainWindow::HandleAddNote() {
                 NewNote.Attachments.push_back({ EncryptedName, DiskName.toStdString(), ivVec, FileSize });
             }
             catch (...) {
-                QMessageBox::critical(this, "Ошибка", "Критический сбой при обработке вложения.");
+                ModernMessageBox::showCritical(this, "Ошибка", "Критический сбой при обработке вложения.");
                 return;
             }
         }
 
         if (m_NotesModel->AddNote(NewNote)) {
-            QMessageBox::information(this, "Успех", "Заметка сохранена в базу!");
+            ModernMessageBox::showInfo(this, "Успех", "Заметка успешно создана и сохранена в базу!");
             UpdateTagsPanel();
         }
         else {
-            QMessageBox::critical(this, "Ошибка", "Не удалось сохранить заметку в базу данных.");
+            ModernMessageBox::showCritical(this, "Ошибка", "Не удалось сохранить заметку в базу данных.");
         }
     }
 }
@@ -304,7 +332,7 @@ void MainWindow::HandleDeleteNote() {
     QModelIndex SelectedIndex = m_NotesView->currentIndex();
 
     if (!SelectedIndex.isValid()) {
-        QMessageBox::warning(this, "Ошибка", "Выберите заметку для удаления!");
+        ModernMessageBox::showWarning(this, "Ошибка", "Выберите заметку для удаления!");
         return;
     }
 
@@ -313,25 +341,23 @@ void MainWindow::HandleDeleteNote() {
     int TargetRow = SourceIndex.row();
 
     // 3. Запрашиваем подтверждение у пользователя
-    QMessageBox::StandardButton Reply;
-    Reply = QMessageBox::question(this, "Подтверждение", "Вы уверены, что хотите удалить эту заметку?",
-        QMessageBox::Yes | QMessageBox::No);
+    bool Reply = ModernMessageBox::showQuestion(this, "Подтверждение", "Вы уверены, что хотите удалить эту заметку?");
 
-    if (Reply == QMessageBox::Yes) {
+    if (Reply) {
         // 4. Передаем в модель ПРАВИЛЬНУЮ строку
         if (m_NotesModel->RemoveNote(TargetRow)) {
             UpdateTagsPanel();
-            QMessageBox::information(this, "Успех", "Заметка успешно удалена!");
+            ModernMessageBox::showInfo(this, "Успех", "Заметка успешно удалена!");
         }
         else {
-            QMessageBox::warning(this, "Ошибка", "Не удалось удалить запись из базы данных.");
+            ModernMessageBox::showWarning(this, "Ошибка", "Не удалось удалить запись из базы данных.");
         }
     }
 }
 void MainWindow::HandleDecryptNote() {
     QModelIndex currentIndex = m_NotesView->currentIndex();
     if (!currentIndex.isValid()) {
-        QMessageBox::warning(this, "Внимание", "Пожалуйста, выберите заметку из списка!");
+        ModernMessageBox::showWarning(this, "Внимание", "Пожалуйста, выберите заметку из списка!");
         return;
     }
     QModelIndex sourceIndex = m_ProxyModel->mapToSource(currentIndex);
@@ -347,27 +373,52 @@ void MainWindow::HandleDecryptNote() {
             QDialog* viewDialog = new QDialog(this);
             viewDialog->setObjectName("DecryptViewDialog");
             viewDialog->setWindowTitle(QString::fromStdString(m_UserNotes[currentRow].Name));
-            viewDialog->setMinimumSize(450, 480); // Увеличили высоту под плашки файлов
+            viewDialog->setMinimumSize(480, 500); // Оптимальный размер
 
-            QVBoxLayout* layout = new QVBoxLayout(viewDialog);
+            // Настройка прозрачности и размытия Mica
+            viewDialog->setAttribute(Qt::WA_TranslucentBackground, true);
+            viewDialog->setWindowFlags(Qt::Window | Qt::WindowCloseButtonHint | Qt::CustomizeWindowHint);
+            WinThemeUtils::ApplyModernBlur(viewDialog);
 
-            QTextEdit* viewer = new QTextEdit(viewDialog);
+            // Базовый слой без отступов
+            QVBoxLayout* rootLayout = new QVBoxLayout(viewDialog);
+            rootLayout->setContentsMargins(0, 0, 0, 0);
+
+            // Подложка-канвас
+            QWidget* mainCanvas = new QWidget(viewDialog);
+            mainCanvas->setObjectName("MainCanvas");
+            rootLayout->addWidget(mainCanvas);
+
+            // Внутренняя разметка на канвасе
+            QVBoxLayout* layout = new QVBoxLayout(mainCanvas);
+            layout->setContentsMargins(24, 24, 24, 24);
+            layout->setSpacing(12);
+
+            QTextEdit* viewer = new QTextEdit(mainCanvas);
             viewer->setObjectName("DecryptViewer");
             viewer->setReadOnly(true);
             viewer->setMarkdown(QString::fromLocal8Bit(decryptedText.c_str()));
+
+            // Сбрасываем стандартную палитру QTextEdit на прозрачную
+            QPalette viewPal = viewer->palette();
+            viewPal.setColor(QPalette::Base, Qt::transparent);
+            viewer->setPalette(viewPal);
+            viewer->viewport()->setAutoFillBackground(false);
+            viewer->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
+
             layout->addWidget(viewer);
 
-            // === НОВЫЙ БЛОК: Отображение и дешифрование вложений ===
+            // === Отображение и дешифрование вложений ===
             const Note& currentNote = m_UserNotes[currentRow];
             if (!currentNote.Attachments.empty()) {
-                QLabel* attachLabel = new QLabel("📎 Доступные вложения (нажмите для сохранения):", viewDialog);
-                attachLabel->setStyleSheet("font-weight: bold; margin-top: 10px;");
+                QLabel* attachLabel = new QLabel("📎 Доступные вложения (нажмите для сохранения):", mainCanvas);
+                attachLabel->setStyleSheet("font-weight: bold; margin-top: 5px; color: #94a3b8;");
                 layout->addWidget(attachLabel);
 
                 QHBoxLayout* attachLayout = new QHBoxLayout();
+                attachLayout->setSpacing(8);
 
                 for (const auto& attach : currentNote.Attachments) {
-                    // 1. Расшифровываем оригинальное имя файла
                     std::string decryptedFileNameStr;
                     try {
                         decryptedFileNameStr = DecryptAES(attach.OriginalNameEncrypted, DecryptingKey, RandomSaltVector);
@@ -377,27 +428,23 @@ void MainWindow::HandleDecryptNote() {
                     }
                     QString decryptedFileName = QString::fromStdString(decryptedFileNameStr);
 
-                    // Создаем кнопку-плашку файла
-                    QPushButton* fileBtn = new QPushButton(QString("💾 %1").arg(decryptedFileName), viewDialog);
-                    fileBtn->setStyleSheet("padding: 5px 10px; background-color: #2e303f; border-radius: 4px; color: #ffffff;");
+                    QPushButton* fileBtn = new QPushButton(QString("💾 %1").arg(decryptedFileName), mainCanvas);
+                    fileBtn->setObjectName("TagButton");
 
-                    // При клике -> Расшифровываем файл и сохраняем его через диалог
                     connect(fileBtn, &QPushButton::clicked, this, [this, attach, decryptedFileName, DecryptingKey, RandomSaltVector]() {
                         QString savePath = QFileDialog::getSaveFileName(this, "Сохранить файл как...", decryptedFileName);
                         if (!savePath.isEmpty()) {
                             QString encryptedFilePath = QString("./attachments/%1").arg(QString::fromStdString(attach.DiskFileName));
-
                             try {
-                                // Потоком расшифровываем файл напрямую на диск
                                 if (DecryptFileStream(encryptedFilePath.toStdString(), savePath.toStdString(), DecryptingKey, RandomSaltVector, attach.Iv)) {
-                                    QMessageBox::information(this, "Успех", "Файл успешно сохранен!");
+                                    ModernMessageBox::showInfo(this, "Успех", "Файл успешно сохранен!");
                                 }
                                 else {
-                                    QMessageBox::critical(this, "Ошибка", "Не удалось расшифровать файл или записать на диск.");
+                                    ModernMessageBox::showCritical(this, "Ошибка", "Не удалось расшифровать файл.");
                                 }
                             }
                             catch (const std::exception& e) {
-                                QMessageBox::critical(this, "Ошибка", QString("Ошибка дешифрования: %1").arg(e.what()));
+                                ModernMessageBox::showCritical(this, "Ошибка", QString("Ошибка дешифрования: %1").arg(e.what()));
                             }
                         }
                         });
@@ -408,7 +455,7 @@ void MainWindow::HandleDecryptNote() {
                 layout->addLayout(attachLayout);
             }
 
-            QPushButton* closeBtn = new QPushButton("Закрыть", viewDialog);
+            QPushButton* closeBtn = new QPushButton("Закрыть", mainCanvas);
             closeBtn->setObjectName("DecryptCloseBtn");
             connect(closeBtn, &QPushButton::clicked, viewDialog, &QDialog::accept);
             layout->addWidget(closeBtn);
@@ -418,7 +465,7 @@ void MainWindow::HandleDecryptNote() {
             delete viewDialog;
         }
         catch (const std::exception& e) {
-            QMessageBox::critical(this, "Ошибка", "Неверный ключ шифрования или данные повреждены!");
+            ModernMessageBox::showCritical(this, "Ошибка", "Неверный ключ шифрования или данные повреждены!");
         }
     }
 }
@@ -436,13 +483,13 @@ void MainWindow::HandleChangeMasterPassword() {
                 std::string dekForHash(testDecryptedDEK.data(), testDecryptedDEK.length());
                 if (CalculateSHA256(dekForHash) != m_DEKHash) {
                     OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
-                    QMessageBox::critical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
+                    ModernMessageBox::showCritical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
                     return;
                 }
                 OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
             }
             catch (...) {
-                QMessageBox::critical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
+                ModernMessageBox::showCritical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
                 return;
             }
             // 2. Зашифровываем ТОТ ЖЕ САМЫЙ DEK с использованием НОВОГО пароля,
@@ -454,7 +501,7 @@ void MainWindow::HandleChangeMasterPassword() {
                 QString::fromStdString(newEncryptedDEK),
                 QString::fromStdString(m_DEKHash)))
             {
-                QMessageBox::warning(this, "Ошибка", "Не удалось обновить крипто-ключи в базе данных.");
+                ModernMessageBox::showWarning(this, "Ошибка", "Не удалось обновить крипто-ключи в базе данных.");
                 return;
             }
             // 4. Обновляем переменные в памяти
@@ -465,10 +512,10 @@ void MainWindow::HandleChangeMasterPassword() {
             OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
             m_MasterPassword.reset(new ProtectedKey(newPassword));
 
-            QMessageBox::information(this, "Успех", "Мастер-пароль успешно изменен!");
+            ModernMessageBox::showInfo(this, "Успех", "Мастер-пароль успешно изменен!");
         }
         catch (const std::exception& e) {
-            QMessageBox::critical(this, "Критическая ошибка",
+            ModernMessageBox::showCritical(this, "Критическая ошибка",
                 QString("Сбой при перешифровании: %1").arg(e.what()));
         }
     }
