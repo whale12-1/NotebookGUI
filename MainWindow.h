@@ -37,7 +37,6 @@ private slots:
 	void HandleBtnSettingsClicked();
 	void HandleDecryptNote();
 	void HandleDeleteNote();
-	void HandleChangeMasterPassword();
 	void HandleInactivityLockOut();
 	void ClearSecureClipboard();
 	void OnCopySecretClicked(const QString& secretText);
@@ -55,7 +54,6 @@ private:
 	QPushButton* m_CreateButton;
 	QPushButton* m_DecryptButton;
 	QPushButton* m_DeleteButton;
-	QPushButton* m_ChangePassButton;
 	QPushButton* m_SettingsBtn;
 
 	QTimer* m_InactivityTimer;

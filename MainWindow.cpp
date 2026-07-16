@@ -130,9 +130,6 @@ MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("dat
     m_DeleteButton->setObjectName("m_DeleteButton");
     MainLayout->addWidget(m_DeleteButton);
     // Кнопка "Сменить Мастер-пароль"
-    m_ChangePassButton = new QPushButton("🔒 Сменить Мастер-пароль", mainCanvas); // Вместо this
-    MainLayout->addWidget(m_ChangePassButton);
-
     m_ClipboardTimer = new QTimer(this);
     m_ClipboardTimer->setInterval(30000); // 30 секунд в мс
     m_ClipboardTimer->setSingleShot(true);
@@ -145,7 +142,6 @@ MainWindow::MainWindow(QWidget* parent) :QMainWindow(parent), m_FileManager("dat
     connect(m_CreateButton, &QPushButton::clicked, this, &MainWindow::HandleAddNote);
     connect(m_DecryptButton, &QPushButton::clicked, this, &MainWindow::HandleDecryptNote);
     connect(m_DeleteButton, &QPushButton::clicked, this, &MainWindow::HandleDeleteNote);
-    connect(m_ChangePassButton, &QPushButton::clicked, this, &MainWindow::HandleChangeMasterPassword);
     connect(m_InactivityTimer, &QTimer::timeout, this, &MainWindow::HandleInactivityLockOut);
     // Когда текст в строке поиска меняется, прокси-модель автоматически применяет его как фильтр
     connect(m_SearchField, &QLineEdit::textChanged, m_ProxyModel, &QSortFilterProxyModel::setFilterFixedString);
@@ -470,56 +466,6 @@ void MainWindow::HandleDecryptNote() {
     }
 }
 
-void MainWindow::HandleChangeMasterPassword() {
-    ChangePassDialog Dialog(this);
-    if (Dialog.exec() == QDialog::Accepted) {
-        SecureString oldPassword = Dialog.GetOldPass();
-        SecureString newPassword = Dialog.GetNewPass();
-        std::vector<unsigned char> RandomSaltVector(m_RandomSalt.begin(), m_RandomSalt.end());
-        try {
-            SecureString testDecryptedDEK;
-            try {
-                testDecryptedDEK = DecryptAES(m_ActualEncryptedDEK, oldPassword, RandomSaltVector);
-                std::string dekForHash(testDecryptedDEK.data(), testDecryptedDEK.length());
-                if (CalculateSHA256(dekForHash) != m_DEKHash) {
-                    OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
-                    ModernMessageBox::showCritical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
-                    return;
-                }
-                OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
-            }
-            catch (...) {
-                ModernMessageBox::showCritical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
-                return;
-            }
-            // 2. Зашифровываем ТОТ ЖЕ САМЫЙ DEK с использованием НОВОГО пароля,
-            // но сохраняя текущую соль файла, чтобы не сломать ключи существующих заметок!
-            std::string newEncryptedDEK = EncryptAES(testDecryptedDEK, newPassword, RandomSaltVector);
-            // 3. Запись на диск
-            if (!DatabaseManager::instance().SaveCryptoKeys(
-                QString::fromStdString(m_RandomSalt),
-                QString::fromStdString(newEncryptedDEK),
-                QString::fromStdString(m_DEKHash)))
-            {
-                ModernMessageBox::showWarning(this, "Ошибка", "Не удалось обновить крипто-ключи в базе данных.");
-                return;
-            }
-            // 4. Обновляем переменные в памяти
-            m_ActualEncryptedDEK = newEncryptedDEK;
-            m_DecryptedDEK.reset(new ProtectedKey(testDecryptedDEK)); // Теперь глобальный DEK гарантированно живой
-            std::string dekForHash(testDecryptedDEK.data(), testDecryptedDEK.length());
-            m_DEKHash = CalculateSHA256(dekForHash);
-            OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
-            m_MasterPassword.reset(new ProtectedKey(newPassword));
-
-            ModernMessageBox::showInfo(this, "Успех", "Мастер-пароль успешно изменен!");
-        }
-        catch (const std::exception& e) {
-            ModernMessageBox::showCritical(this, "Критическая ошибка",
-                QString("Сбой при перешифровании: %1").arg(e.what()));
-        }
-    }
-}
 
 void MainWindow::ClearSecureClipboard() {
     QClipboard* clipboard = QApplication::clipboard();
@@ -540,7 +486,7 @@ void MainWindow::ClearSecureClipboard() {
 
 
 void MainWindow::HandleBtnSettingsClicked() {
-    SettingsDialog Settings(m_UserNotes,m_DecryptedDEK->data(), m_RandomSalt, this);
+    SettingsDialog Settings(m_DEKHash, m_ActualEncryptedDEK, m_UserNotes,m_DecryptedDEK, m_MasterPassword, m_RandomSalt, this);
     Settings.setStyleSheet(this->styleSheet());
     Settings.exec();
 }
