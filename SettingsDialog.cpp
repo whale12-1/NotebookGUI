@@ -14,9 +14,16 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <openssl/crypto.h>
+#include "ChangePass.h"
 
-SettingsDialog::SettingsDialog(const std::vector<Note>& UserNotes, const SecureString& decryptedDEK, const std::string& randomSalt, QWidget* parent)
-    : QDialog(parent), m_DecryptedDEK(decryptedDEK), m_RandomSalt(randomSalt), m_UserNotes(UserNotes)
+SettingsDialog::SettingsDialog(
+    std::string& DEKHash,
+    std::string& encryptedDEK, 
+    const std::vector<Note>& UserNotes,
+    std::unique_ptr<ProtectedKey>& decryptedDEK,
+    std::unique_ptr<ProtectedKey>&masterPass, 
+    const std::string& randomSalt, 
+    QWidget* parent): QDialog(parent), m_DecryptedDEK(decryptedDEK), m_RandomSalt(randomSalt), m_UserNotes(UserNotes), m_MasterPassword(masterPass),m_EncryptedDEK(encryptedDEK), m_DEKHash(DEKHash)
 {
     setObjectName("SettingsDialog");
 
@@ -75,6 +82,7 @@ void SettingsDialog::SetupUI() {
     securityTab->setAttribute(Qt::WA_TranslucentBackground, true); // Прозрачность вкладки
     QVBoxLayout* securityLayout = new QVBoxLayout(securityTab);
     securityLayout->setContentsMargins(15, 15, 15, 15);
+    securityLayout->setSpacing(12);
 
     m_ChbEnable2FA = new QCheckBox("Включить двухфакторную аутентификацию (2FA)", securityTab);
     m_Lbl2FAStatus = new QLabel(securityTab);
@@ -85,6 +93,14 @@ void SettingsDialog::SetupUI() {
 
     securityLayout->addWidget(m_ChbEnable2FA);
     securityLayout->addWidget(m_Lbl2FAStatus);
+
+    securityLayout->addSpacing(10);
+
+    // Кнопка смены мастер-пароля
+    m_BtnChangePassword = new QPushButton("Сменить мастер-пароль", securityTab);
+    m_BtnChangePassword->setObjectName("btnChangePassword");
+    securityLayout->addWidget(m_BtnChangePassword);
+
     securityLayout->addStretch();
 
     // Добавляем вкладки в виджет
@@ -102,6 +118,7 @@ void SettingsDialog::SetupUI() {
     connect(btnClose, &QPushButton::clicked, this, &QDialog::accept);
     connect(m_BtnCreateBackup, &QPushButton::clicked, this, &SettingsDialog::HandleCreateBackup);
     connect(m_ChbEnable2FA, &QCheckBox::toggled, this, &SettingsDialog::HandleToggle2FA);
+    connect(m_BtnChangePassword, &QPushButton::clicked, this, &SettingsDialog::HandleChangePassword);
 }
 
 void SettingsDialog::HandleCreateBackup() {
@@ -128,8 +145,8 @@ void SettingsDialog::HandleCreateBackup() {
     try {
         FileManager BackupSaver(savePath.toStdString());
         std::vector<unsigned char>RandomSaltVector(m_RandomSalt.begin(), m_RandomSalt.end());
-        std::string EncryptedDEK = EncryptAES(m_DecryptedDEK, EnteredKey, RandomSaltVector);
-        std::string dekForHash(m_DecryptedDEK.data(), m_DecryptedDEK.length());
+        std::string EncryptedDEK = EncryptAES(m_DecryptedDEK->data(), EnteredKey, RandomSaltVector);
+        std::string dekForHash(m_DecryptedDEK->data().data(), m_DecryptedDEK->data().length());
         std::string DEKHash = CalculateSHA256(dekForHash);
         OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
         if (!BackupSaver.SaveBackup(m_UserNotes, EncryptedDEK, m_RandomSalt, DEKHash)) {
@@ -213,7 +230,7 @@ void SettingsDialog::HandleToggle2FA(bool enabled) {
             int code = confirmField->text().toInt();
             if (Verify2FACode(rawSecret, code)) {
                 std::vector<unsigned char> saltVector(m_RandomSalt.begin(), m_RandomSalt.end());
-                std::string encryptedSecret = EncryptAES(rawSecret, m_DecryptedDEK, saltVector);
+                std::string encryptedSecret = EncryptAES(rawSecret, m_DecryptedDEK->data(), saltVector);
 
                 if (DatabaseManager::instance().Enable2FA(encryptedSecret)) {
                     // Замена QMessageBox на кастомный ModernMessage
@@ -255,6 +272,57 @@ void SettingsDialog::HandleToggle2FA(bool enabled) {
             m_ChbEnable2FA->blockSignals(true);
             m_ChbEnable2FA->setChecked(true);
             m_ChbEnable2FA->blockSignals(false);
+        }
+    }
+}
+
+void SettingsDialog::HandleChangePassword() {
+    ChangePassDialog Dialog(this);
+    if (Dialog.exec() == QDialog::Accepted) {
+        SecureString oldPassword = Dialog.GetOldPass();
+        SecureString newPassword = Dialog.GetNewPass();
+        std::vector<unsigned char> RandomSaltVector(m_RandomSalt.begin(), m_RandomSalt.end());
+        try {
+            SecureString testDecryptedDEK;
+            try {
+                testDecryptedDEK = DecryptAES(m_EncryptedDEK, oldPassword, RandomSaltVector);
+                std::string dekForHash(testDecryptedDEK.data(), testDecryptedDEK.length());
+                if (CalculateSHA256(dekForHash) != m_DEKHash) {
+                    OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
+                    ModernMessageBox::showCritical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
+                    return;
+                }
+                OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
+            }
+            catch (...) {
+                ModernMessageBox::showCritical(this, "Ошибка", "Старый мастер-пароль введен неверно!");
+                return;
+            }
+            // 2. Зашифровываем ТОТ ЖЕ САМЫЙ DEK с использованием НОВОГО пароля,
+            // но сохраняя текущую соль файла, чтобы не сломать ключи существующих заметок!
+            std::string newEncryptedDEK = EncryptAES(testDecryptedDEK, newPassword, RandomSaltVector);
+            // 3. Запись на диск
+            if (!DatabaseManager::instance().SaveCryptoKeys(
+                QString::fromStdString(m_RandomSalt),
+                QString::fromStdString(newEncryptedDEK),
+                QString::fromStdString(m_DEKHash)))
+            {
+                ModernMessageBox::showWarning(this, "Ошибка", "Не удалось обновить крипто-ключи в базе данных.");
+                return;
+            }
+            // 4. Обновляем переменные в памяти
+            m_EncryptedDEK = newEncryptedDEK;
+            m_DecryptedDEK.reset(new ProtectedKey(testDecryptedDEK)); // Теперь глобальный DEK гарантированно живой
+            std::string dekForHash(testDecryptedDEK.data(), testDecryptedDEK.length());
+            m_DEKHash = CalculateSHA256(dekForHash);
+            OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
+            m_MasterPassword.reset(new ProtectedKey(newPassword));
+
+            ModernMessageBox::showInfo(this, "Успех", "Мастер-пароль успешно изменен!");
+        }
+        catch (const std::exception& e) {
+            ModernMessageBox::showCritical(this, "Критическая ошибка",
+                QString("Сбой при перешифровании: %1").arg(e.what()));
         }
     }
 }
