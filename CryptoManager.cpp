@@ -20,6 +20,42 @@
 #include <iomanip>
 #include <string>
 #include <stdexcept>
+#include <QFile>
+
+
+std::string CalculateFileSHA256(const QString& filePath) {
+	QFile file(filePath);
+	if (!file.open(QIODevice::ReadOnly)) {
+		return "";
+	}
+
+	// Инициализируем контекст OpenSSL EVP для SHA-256
+	EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+	const EVP_MD* md = EVP_sha256();
+	EVP_DigestInit_ex(mdctx, md, nullptr);
+
+	char buffer[4096]; // Читаем файл блоками по 4 КБ
+	while (!file.atEnd()) {
+		qint64 bytesRead = file.read(buffer, sizeof(buffer));
+		if (bytesRead > 0) {
+			EVP_DigestUpdate(mdctx, buffer, bytesRead);
+		}
+	}
+	file.close();
+
+	// Получаем финальный хэш
+	unsigned char hash[EVP_MAX_MD_SIZE];
+	unsigned int hashLen = 0;
+	EVP_DigestFinal_ex(mdctx, hash, &hashLen);
+	EVP_MD_CTX_free(mdctx);
+
+	// Конвертируем в HEX-строку
+	std::stringstream ss;
+	for (unsigned int i = 0; i < hashLen; ++i) {
+		ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+	}
+	return ss.str();
+}
 std::string EncodeBase32(const unsigned char* data, size_t length) {
 	const char* alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 	std::string result;
@@ -398,7 +434,7 @@ SecureString QStringToSecureString(const QString& qtStr) {
 constexpr size_t BUFFER_SIZE = 65536;
 
 // Потоковое шифрование файла
-#include <QFile> // Обязательно добавляем для кроссплатформенной работы с файлами
+// // Обязательно добавляем для кроссплатформенной работы с файлами
 #include <fstream>
 
 // Потоковое шифрование файла через QFile

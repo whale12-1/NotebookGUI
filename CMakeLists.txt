@@ -16,7 +16,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Network)
 
 # --- ПРАВИЛЬНЫЙ ПОИСК OPENSSL ДЛЯ WINDOWS ---
 # Задаем базовую директорию установки
@@ -59,12 +59,15 @@ add_executable(NoteBookGUI
     WinThemeUtils.h
     WinThemeUtils.cpp
     ModernMessage.h
+    SyncManager.h 
+    SyncManager.cpp
 )
 
 # Линкуем Qt6
 target_link_libraries(NoteBookGUI PRIVATE 
     Qt6::Widgets 
     Qt6::Sql 
+    Qt6::Network
     OpenSSL::SSL 
     OpenSSL::Crypto
 )

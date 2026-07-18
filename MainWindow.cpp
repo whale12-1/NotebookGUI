@@ -22,12 +22,12 @@
 // Виджеты для отображения текста и всплывающих окон
 #include <QLabel>        
 #include <QMessageBox>   
-
+#include <QStatusBar>
 // Твои кастомные окна и менеджеры
 #include "CreateNoteDialog.h" 
 #include "DecryptDialog.h"
 #include "ChangePass.h"
-
+#include "SyncManager.h"
 // Стандартные библиотеки для работы с потоками и хэшами (если они нужны внутри методов класса)
 #include <fstream>
 #include <cstdio>        // Для std::remove и std::rename при сохранении файла
@@ -234,7 +234,19 @@ void MainWindow::InitSession(const SecureString& DecryptedDek,
     m_MasterPassword = std::make_unique<ProtectedKey>(MasterPassword);
     m_RandomSalt = Salt;
     m_NotesModel->PopulateFromDatabase();
+    connect(&SyncManager::instance(), &SyncManager::syncFinished, this, [this](bool success, QString message) {
+        if (success) {
+            m_NotesModel->PopulateFromDatabase(); // Перечитываем, если прилетели новые данные
+            this->statusBar()->showMessage("Облако синхронизировано!", 3000);
+        }
+        else {
+            this->statusBar()->showMessage("Ошибка синхронизации: " + message, 5000);
+        }
+        });
 
+    // --- ДОБАВЛЯЕМ СЮДА: Запуск триггера синхронизации при входе ---
+    QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
+    SyncManager::instance().syncDatabase(dbPath);
     // Твой старый код отрисовки интерфейса и запуска таймера активности...
     UpdateTagsPanel();
 }
@@ -302,10 +314,10 @@ void MainWindow::HandleAddNote() {
                     QMessageBox::warning(this, "Ошибка", "Ошибка при записи файла вложения.");
                     return;
                 }
-
+                std::string FileHash = CalculateFileSHA256(QString::fromStdString(destPath.toStdString()));
                 // ИСПРАВЛЕНО: В DiskFileName кладем только DiskName.toStdString() (без папки)
                 // Передаем ivVec, соответствующий типу структуры
-                NewNote.Attachments.push_back({ EncryptedName, DiskName.toStdString(), ivVec, FileSize });
+                NewNote.Attachments.push_back({ EncryptedName, DiskName.toStdString(), ivVec, FileSize, FileHash});
             }
             catch (...) {
                 ModernMessageBox::showCritical(this, "Ошибка", "Критический сбой при обработке вложения.");
@@ -316,6 +328,8 @@ void MainWindow::HandleAddNote() {
         if (m_NotesModel->AddNote(NewNote)) {
             ModernMessageBox::showInfo(this, "Успех", "Заметка успешно создана и сохранена в базу!");
             UpdateTagsPanel();
+            QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
+            SyncManager::instance().syncDatabase(dbPath);
         }
         else {
             ModernMessageBox::showCritical(this, "Ошибка", "Не удалось сохранить заметку в базу данных.");
@@ -344,6 +358,8 @@ void MainWindow::HandleDeleteNote() {
         if (m_NotesModel->RemoveNote(TargetRow)) {
             UpdateTagsPanel();
             ModernMessageBox::showInfo(this, "Успех", "Заметка успешно удалена!");
+            QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
+            SyncManager::instance().syncDatabase(dbPath);
         }
         else {
             ModernMessageBox::showWarning(this, "Ошибка", "Не удалось удалить запись из базы данных.");

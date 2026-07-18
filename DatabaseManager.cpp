@@ -55,8 +55,9 @@ bool DatabaseManager::initDatabase(const QString& dbName) {
         "MasterSalt TEXT NOT NULL, "
         "EncryptedDek TEXT NOT NULL, "
         "DekHash TEXT NOT NULL, "
-        "Is2FAEnabled INTEGER DEFAULT 0, "  // Новая колонка (0 - выкл, 1 - вкл)
-        "Secret2FA TEXT DEFAULT ''"          // Новая колонка для зашифрованного секрета
+        "Is2FAEnabled INTEGER DEFAULT 0, "
+        "Secret2FA TEXT DEFAULT '', "
+        "Version INTEGER DEFAULT 1"  // <-- НАША НОВАЯ КОЛОНКА
         ");";
 
     if (!query.exec(CreateSystemTable)) {
@@ -72,6 +73,7 @@ bool DatabaseManager::initDatabase(const QString& dbName) {
         "disk_filename TEXT NOT NULL,"
         "iv BLOB NOT NULL,"
         "file_size INTEGER NOT NULL,"
+        "file_hash TEXT NOT NULL DEFAULT ''," // <-- ДОБАВИЛИ КОЛОНКУ
         "FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE"
         ");";
 
@@ -145,8 +147,8 @@ bool DatabaseManager::InsertNoteRaw(Note& note) {
             return false;
         }
     }
-    Query.prepare("INSERT INTO attachments (note_id, original_name_encrypted, disk_filename, iv, file_size) "
-        "VALUES (:note_id, :orig_name, :disk_name, :iv, :file_size);");
+    Query.prepare("INSERT INTO attachments (note_id, original_name_encrypted, disk_filename, iv, file_size, file_hash) "
+        "VALUES (:note_id, :orig_name, :disk_name, :iv, :file_size, :file_hash);");
     for (const auto& attach : note.Attachments) {
         Query.bindValue(":note_id", note.Id);
         Query.bindValue(":orig_name", QString::fromStdString(attach.OriginalNameEncrypted));
@@ -157,7 +159,7 @@ bool DatabaseManager::InsertNoteRaw(Note& note) {
         Query.bindValue(":iv", ivBytes);
 
         Query.bindValue(":file_size", attach.FileSize);
-
+        Query.bindValue(":file_hash", QString::fromStdString(attach.FileHash));
         if (!Query.exec()) {
             qDebug() << "InsertNoteRaw error (attachments):" << Query.lastError().text();
             return false;
@@ -188,6 +190,11 @@ bool DatabaseManager::AddNote(Note& note) {
     // Просто вызываем наш низкоуровневый метод для фактической записи!
     if (!InsertNoteRaw(note)) {
         rollbackTransaction(); // Откатываемся в случае ошибки[cite: 5]
+        return false;
+    }
+    if (!IncrementDatabaseVersion()) {
+        qDebug() << "Cloud database error";
+        rollbackTransaction();
         return false;
     }
 
@@ -289,6 +296,10 @@ bool DatabaseManager::RemoveNote(long long noteId) {
     }
 
     // Если всё прошло гладко — фиксируем изменения на диске
+    if (!IncrementDatabaseVersion()) {
+        rollbackTransaction();
+        return false;
+    }
     return m_db.commit();
 }
 
@@ -335,7 +346,7 @@ std::vector<Note> DatabaseManager::getAllNotes() {
         }
     }
     // === ШАГ 3: Чтение вложений из БД ===
-    if (!query.exec("SELECT note_id, original_name_encrypted, disk_filename, iv, file_size FROM attachments;")) {
+    if (!query.exec("SELECT note_id, original_name_encrypted, disk_filename, iv, file_size, file_hash FROM attachments;")) {
         qDebug() << "Ошибка чтения вложений:" << query.lastError().text();
         return notesList;
     }
@@ -351,7 +362,7 @@ std::vector<Note> DatabaseManager::getAllNotes() {
         attach.Iv.assign(ivData.begin(), ivData.end());
 
         attach.FileSize = query.value(4).toLongLong();
-
+        attach.FileHash = query.value(5).toString().toStdString();
         // Если заметка с таким ID существует в нашем векторе, добавляем вложение к ней
         if (idToVectorIndex.find(noteId) != idToVectorIndex.end()) {
             size_t vectorIdx = idToVectorIndex[noteId];
@@ -420,4 +431,17 @@ bool DatabaseManager::rollbackTransaction() {
         return m_db.rollback();
     }
     return false;
+}
+
+bool DatabaseManager::IncrementDatabaseVersion() {
+    QSqlQuery query;
+    return query.exec("UPDATE SystemInfo SET Version = Version + 1;");
+}
+
+int DatabaseManager::GetDatabaseVersion() {
+    QSqlQuery query;
+    if (query.exec("SELECT Version FROM SystemInfo LIMIT 1;") && query.next()) {
+        return query.value(0).toInt();
+    }
+    return 1; // Дефолтное значение, если что-то пошло не так
 }

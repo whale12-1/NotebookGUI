@@ -9,7 +9,8 @@ struct AttachmentInfo {
     std::string OriginalNameEncrypted;    // Чтобы знать, как файл назывался
     std::string DiskFileName;             // Чтобы найти его в папке attachments
     std::vector<unsigned char> Iv;        // Чтобы расшифровать
-    long long FileSize = 0;               // Чтобы UI мгновенно показывал размер
+    long long FileSize = 0;
+    std::string FileHash;
 };
 
 struct Note {
@@ -20,6 +21,9 @@ struct Note {
     std::vector<std::string> Tags;   
     std::vector<AttachmentInfo> Attachments;
 };
+
+std::string CalculateFileSHA256(const QString& filePath);
+
 SecureString QStringToSecureString(const QString& qtStr);
 
 std::string EncodeBase32(const unsigned char* data, size_t length);

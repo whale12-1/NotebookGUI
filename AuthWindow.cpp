@@ -7,6 +7,7 @@
 #include "MainWindow.h"      // Чтобы создать и показать главное окно при успешном входе
 #include "TwoFactorDialog.h"
 #include "PasswordInput.h"
+#include "SyncManager.h"
 // 2. Инклуды элементов интерфейса Qt
 #include <QLineEdit>
 #include <QPushButton>
@@ -127,7 +128,6 @@ bool AuthWindow::IsStorageExists() const {
         // ВРЕМЕННЫЙ ДИАГНОСТИЧЕСКИЙ МЕССЕДЖ-БОКС (удали его, когда всё заработает)
         ModernMessageBox::showInfo(nullptr, "Диагностика путей",
             "Программа ищет базу по пути:\n" + dbPath + "\n\nНо этого файла там сейчас НЕТ.");
-        return false;
     }
 
     // Если файл есть, инициализируем подключение
@@ -156,7 +156,6 @@ void AuthWindow::HandleBtnLogin() {
     std::string DEKHash;
 
     QString MasterSalt, EncryptedDek, DekHash;
-    DatabaseManager::instance().LoadCryptoKeys(MasterSalt, EncryptedDek, DekHash);
     if (!DatabaseManager::instance().LoadCryptoKeys(MasterSalt, EncryptedDek, DekHash)) {
         ModernMessageBox::showCritical(this, "Ошибка", "Служебные крипто-данные не найдены в базе!");
         return;
@@ -164,11 +163,13 @@ void AuthWindow::HandleBtnLogin() {
     salt = MasterSalt.toStdString();
     encryptedDEK = EncryptedDek.toStdString();
     DEKHash = DekHash.toStdString();
+
     try {
         SecureString inputPassSecureString = QStringToSecureString(password);
         std::vector<unsigned char> saltVector(salt.begin(), salt.end()); // Преобразуем соль в вектор для криптографии
         SecureString decryptedDEK = DecryptAES(encryptedDEK, inputPassSecureString, saltVector);
         std::string dekForHash(decryptedDEK.data(), decryptedDEK.length());
+
         if (CalculateSHA256(dekForHash) != DEKHash) {
             OPENSSL_cleanse(&decryptedDEK[0], decryptedDEK.length());
             OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
@@ -176,6 +177,8 @@ void AuthWindow::HandleBtnLogin() {
             return;
         }
         OPENSSL_cleanse(&dekForHash[0], dekForHash.length());
+
+        // Проверка 2FA (если включена)
         if (DatabaseManager::instance().Is2FAEnabled()) {
             TwoFactorAuthDialog Dialog(this);
             if (Dialog.exec() == QDialog::Accepted) {
@@ -193,96 +196,113 @@ void AuthWindow::HandleBtnLogin() {
                 }
             }
             else {
-                return;
+                return; // Пользователь отменил 2FA диалог
             }
         }
-        // 3. ЕСЛИ ВСЁ ОТЛИЧНО: Создаем главное окно, передаем туда данные и открываем его!
+
+        // --- ЛОКАЛЬНЫЙ ПАРОЛЬ И 2FA ВЕРНЫ. НАЧИНАЕМ ПРОЦЕСС ВХОДА ---
         m_BtnLogin->setEnabled(false);
         m_PasswordInput->setEnabled(false);
-        m_StatusLabel->setText("Проверка целостности базы данных сейфа...");
+        m_StatusLabel->setText("Синхронизация с облаком...");
 
-            // 4. Создаем watcher для слежения за фоновым потоком проверки хэшей
-        QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
-        auto* watcher = new QFutureWatcher<bool>(this);
+        // Лямбда-функция для продолжения входа (запуск проверки хэшей базы и открытие MainWindow)
+        auto proceedToMainApp = [this, decryptedDEK, encryptedDEK, salt, inputPassSecureString, DEKHash]() mutable {
+            m_StatusLabel->setText("Проверка целостности базы данных сейфа...");
 
-        connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher, decryptedDEK, encryptedDEK, salt, inputPassSecureString, DEKHash]() mutable {
-            // Получаем результат выполнения ValidateIntegrity из фонового потока
-            bool integrityOk = watcher->result();
-            watcher->deleteLater();
+            QString dbPath = QCoreApplication::applicationDirPath() + "/SafeData.db";
+            auto* watcher = new QFutureWatcher<bool>(this);
 
-            if (!integrityOk) {
-                ModernMessageBox::showCritical(this, "Критическая ошибка", "Обнаружено несанкционированное изменение данных Сейфа (цепочка хэшей разорвана). Доступ заблокирован!");
-                // Разблокируем форму, чтобы дать шанс войти в другой сейф или попробовать снова
-                m_BtnLogin->setEnabled(true);
-                m_PasswordInput->setEnabled(true);
-                m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
-                return;
-            }
+            connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher, decryptedDEK, encryptedDEK, salt, inputPassSecureString, DEKHash]() mutable {
+                bool integrityOk = watcher->result();
+                watcher->deleteLater();
 
-            // 5. ЕСЛИ ХЭШИ В ПОРЯДКЕ: Создаем MainWindow, передаем сессию и открываем
-            MainWindow* mainWindow = new MainWindow();
-            mainWindow->InitSession(decryptedDEK, encryptedDEK, salt, inputPassSecureString, DEKHash);
-            mainWindow->show();
-
-            this->close(); // Закрываем окно авторизации[cite: 3]
-            });
-        // 6. Отправляем ValidateIntegrity() в фоновый пул потоков QtConcurrent
-        QFuture<bool> future = QtConcurrent::run([dbPath]() {
-            // Создаем уникальное имя соединения для этого конкретного фонового потока
-            QString connectionName = "Thread_Validation_Connection";
-
-            bool result = false;
-
-            // Открываем отдельное временное соединение с тем же файлом БД внутри этого потока
-            {
-                QSqlDatabase threadDb = QSqlDatabase::addDatabase("QSQLITE", connectionName);
-                threadDb.setDatabaseName(dbPath);
-
-                if (!threadDb.open()) {
-                    QSqlDatabase::removeDatabase(connectionName);
-                    return false;
+                if (!integrityOk) {
+                    ModernMessageBox::showCritical(this, "Критическая ошибка", "Обнаружено несанкционированное изменение данных Сейфа (цепочка хэшей разорвана). Доступ заблокирован!");
+                    m_BtnLogin->setEnabled(true);
+                    m_PasswordInput->setEnabled(true);
+                    m_StatusLabel->setText("Обнаружен существующий сейф. Пожалуйста, авторизуйтесь:");
+                    return;
                 }
 
-                // Создаем локальный запрос, явно привязанный к новому потоковому соединению
-                QSqlQuery query(threadDb);
+                // Переход в главное окно при успешной валидации хэшей
+                MainWindow* mainWindow = new MainWindow();
+                mainWindow->InitSession(decryptedDEK, encryptedDEK, salt, inputPassSecureString, DEKHash);
+                mainWindow->show();
 
-                // Включаем внешние ключи, если нужно
-                query.exec("PRAGMA foreign_keys = ON;");
+                this->close(); // Закрываем окно авторизации
+                });
 
-                // Выполняем логику ValidateIntegrity прямо здесь, используя query этого потока
-                if (!query.exec("SELECT name, secured_text, previous_hash FROM notes ORDER BY id ASC;")) {
-                    threadDb.close();
-                    QSqlDatabase::removeDatabase(connectionName);
-                    return false;
-                }
+            // Запуск потока валидации цепочки хэшей SQLite
+            QFuture<bool> future = QtConcurrent::run([dbPath]() {
+                QString connectionName = "Thread_Validation_Connection";
+                bool result = false;
 
-                result = true; // Предположим, что все ок, пока не доказано обратное
-                std::string expectedHash = "";
+                {
+                    QSqlDatabase threadDb = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+                    threadDb.setDatabaseName(dbPath);
 
-                while (query.next()) {
-                    std::string name = query.value(0).toString().toStdString();
-                    std::string securedText = query.value(1).toString().toStdString();
-                    std::string previousHash = query.value(2).toString().toStdString();
-
-                    if (previousHash != expectedHash) {
-                        qDebug() << "КРИТИЧЕСКАЯ ОШИБКА В ПОТОКЕ: Цепочка хэшей разорвана!";
-                        result = false;
-                        break;
+                    if (!threadDb.open()) {
+                        QSqlDatabase::removeDatabase(connectionName);
+                        return false;
                     }
 
-                    std::string dataToHash = name + securedText + previousHash;
-                    expectedHash = CalculateSHA256(dataToHash);
+                    QSqlQuery query(threadDb);
+                    query.exec("PRAGMA foreign_keys = ON;");
+
+                    if (!query.exec("SELECT name, secured_text, previous_hash FROM notes ORDER BY id ASC;")) {
+                        threadDb.close();
+                        QSqlDatabase::removeDatabase(connectionName);
+                        return false;
+                    }
+
+                    result = true;
+                    std::string expectedHash = "";
+
+                    while (query.next()) {
+                        std::string name = query.value(0).toString().toStdString();
+                        std::string securedText = query.value(1).toString().toStdString();
+                        std::string previousHash = query.value(2).toString().toStdString();
+
+                        if (previousHash != expectedHash) {
+                            result = false;
+                            break;
+                        }
+
+                        std::string dataToHash = name + securedText + previousHash;
+                        expectedHash = CalculateSHA256(dataToHash);
+                    }
+
+                    threadDb.close();
+                }
+                QSqlDatabase::removeDatabase(connectionName);
+                return result;
+                });
+            watcher->setFuture(future);
+            };
+
+        // --- ИСПРАВЛЕНО: СЕТЕВАЯ АВТОРИЗАЦИЯ БЕЗ UniqueConnection ---
+        // Убрали Qt::UniqueConnection, так как для обычных лямбд он вызывает ругань макроса ASSERT
+        connect(&SyncManager::instance(), &SyncManager::loginStatusChanged, this,
+            [this, proceedToMainApp](bool success, QString message) mutable {
+                // Точечно отключаем этот сигнал, чтобы при дальнейшей работе приложения он не дублировался
+                disconnect(&SyncManager::instance(), &SyncManager::loginStatusChanged, this, nullptr);
+
+                if (!success) {
+                    // Если сервер недоступен, пишем лог и беспрепятственно пускаем в локальный автономный режим
+                    qDebug() << "Предупреждение: Облако недоступно (" << message << "). Вход в автономном режиме.";
+                }
+                else {
+                    qDebug() << "Успешная авторизация в облаке синхронизации.";
                 }
 
-                threadDb.close(); // Закрываем локальное соединение потока
-            }
-
-            // Очищаем имя соединения из глобального репозитория Qt
-            QSqlDatabase::removeDatabase(connectionName);
-
-            return result;
+                // В любом случае (даже без интернета) переходим к расшифровке локального интерфейса
+                proceedToMainApp();
             });
-        watcher->setFuture(future);
+
+        // Асинхронно стучимся на бэкенд синхронизации
+        QString username = "user_" + QString::fromStdString(DEKHash.substr(0, 8));
+        SyncManager::instance().loginToServer(username, QString::fromStdString(DEKHash));
+
     }
     catch (...) {
         m_BtnLogin->setEnabled(true);
