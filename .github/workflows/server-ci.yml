@@ -24,6 +24,6 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./Server
-        file: ./Server/Dockerfile
+        file: ./Dockerfile
         push: false # Нам пока важно просто проверить, компилируется ли C++ код в Docker
         tags: secure-notes-server:latest
