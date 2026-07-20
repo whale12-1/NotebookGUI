@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y \
 # Создаем рабочую директорию
 WORKDIR /app
 
-# Копируем исходный код сервера в контейнер
+# Копируем всё содержимое репозитория
 COPY . .
 
-# Конфигурируем и собираем проект (под Linux используем GCC/Clang)
-# Обрати внимание: FetchContent внутри CMakeLists.txt сам скачает Crow и Asio!
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release
+# Запускаем CMake, явно указав, что исходный код сервера лежит в подпапке Server,
+# чтобы не триггерить корневой CMakeLists.txt с требованиями Qt6
+RUN cmake -S Server -B build -DCMAKE_BUILD_TYPE=Release
 RUN cmake --build build --config Release
 
 # === ЭТАП 2: МИНИМАЛЬНЫЙ ОБРАЗ ДЛЯ ЗАПУСКА ===
